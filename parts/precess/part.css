@@ -5,6 +5,18 @@
   width: 1920px;
   height: 1080px;
 }
+#precess-detectors .precess-canvas {
+  cursor: grab;
+  touch-action: none;
+}
+#precess-detectors .precess-canvas.precess-grabbing {
+  cursor: grabbing;
+}
+.precess-axis-label {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
 
 /* Credits: centred, clear of the bottom 26 px kept free for the presentation's progress bar. */
 .precess-credits {

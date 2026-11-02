@@ -1,0 +1,2 @@
+earth_mask.js: land mask, 360 x 180 bits, rasterised from Natural Earth 110 m land, ne_110m_land.geojson
+(github.com/nvkelso/natural-earth-vector, naturalearthdata.com), public domain.

@@ -5,3 +5,31 @@
   width: 1920px;
   height: 1080px;
 }
+
+/* Amplitude slider: bottom centre, clear of the bottom 26 px kept free for the progress bar. */
+.polar-slider {
+  position: absolute;
+  left: 660px;
+  top: 970px;
+  width: 600px;
+  height: 60px;
+  cursor: pointer;
+  touch-action: none;
+}
+.polar-track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 28px;
+  height: 4px;
+  background: #999;
+}
+.polar-knob {
+  position: absolute;
+  top: 16px;
+  width: 28px;
+  height: 28px;
+  margin-left: -14px;
+  border-radius: 50%;
+  background: #000;
+}

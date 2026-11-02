@@ -8,3 +8,8 @@
 }
 .sphere-canvas.sphere-grab { cursor: grab; }
 .sphere-canvas.sphere-grabbing { cursor: grabbing; }
+.sphere-axis-label {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}

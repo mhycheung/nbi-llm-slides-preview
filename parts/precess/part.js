@@ -1,8 +1,9 @@
 // Equal-mass binary on a circular Newtonian orbit of fixed radius, with spin precession.
 // Slide precess-compare: stage 0 title only; stage 1 non-precessing (left) and precessing
 // (right) side by side, same camera and same orbital rate.
-// Slide precess-detectors: the precessing binary alone, with one small LIGO along J (face on)
-// and one in the plane perpendicular to J (edge on).
+// Slide precess-detectors: the precessing binary alone, smaller, with x, y, z axes, one Earth on
+// the z axis (along J, face on) and one on the x axis (perpendicular to J, edge on). Dragging
+// turns the camera about the binary, to any direction. A dotted circle marks the holes' current orbit.
 (function () {
   "use strict";
 
@@ -84,17 +85,30 @@
   var COL = "#d00000";      // spin arrows
   var SHAFT = 7, HEAD = 26; // arrow shaft width and head length at scale 1
   var S_CMP = 0.84;         // scale of the two panels of the first slide
+  var S_DET = 0.55;         // scale of the binary on the second slide
   var PANELS = [480, 1440], CY_CMP = 600;
   var CX_DET = 960, CY_DET = 590;
-  // Small LIGOs: arm length (slide px), distance from the binary.
-  var ARM = 100, MASS = 9, DIST_J = 510, DIST_PERP = 800;
-  var PERP_AZ = 38 * Math.PI / 180;   // position in the plane perpendicular to J, from camera right
+  var AXIS = 280, AXIS_W = 3, AXIS_HEAD = 24;   // axis half-length, width, arrow head, slide px
+  var AXIS_COL = "#444";
+  var LABEL_OFF = 36;       // axis label from the arrow tip, sideways, slide px
+  var EARTH_D = 410, EARTH_R = 52;    // Earth's distance from the binary and radius, slide px
+  var LON0 = 65;            // Earth's longitude offset, deg: Europe and Africa face the first view
+  var OCEAN = [38, 104, 178], LAND = [86, 158, 76];
+  var DOT_W = 3.5, DOT_GAP = 11;      // dotted orbit: dot size and spacing, slide px
 
   // ---- orthographic camera: right R, up U, towards the camera V (R x U = V) ----
-  var EL = 38 * Math.PI / 180;        // elevation above the plane perpendicular to J
-  var R = [1, 0, 0];
-  var U = [0, Math.sin(EL), Math.cos(EL)];
-  var V = [0, -Math.cos(EL), Math.sin(EL)];
+  // As on the sphere slide: yaw about z, then pitch about the screen's right axis. Pitch 0 looks
+  // down the z axis from above, -90 deg from the side with z up, -180 deg from below.
+  var EL = 38 * Math.PI / 180;        // elevation above the plane perpendicular to J, first slide
+  var EL_DET = 28 * Math.PI / 180, YAW_DET = -30 * Math.PI / 180;   // first view, second slide
+  var DRAG = 0.008;                   // rad per slide px
+  var R, U, V;
+  function setCamera(yaw, pitch) {
+    var cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
+    R = [cy, -sy, 0];
+    U = [sy * cp, cy * cp, -sp];
+    V = [sy * sp, cy * sp, cp];
+  }
 
   function proj(p, cx, cy, s) { return [cx + s * dot(p, R), cy - s * dot(p, U)]; }
 
@@ -132,11 +146,30 @@
     ctx.fill();
   }
 
-  // One binary: square, then far hole and its arrow, then near hole and its arrow. A hole's
+  // The current orbit of the holes, dotted, in the plane of e1, e2.
+  function orbit(ctx, e1, e2, cx, cy, s) {
+    var n = 120;
+    ctx.strokeStyle = "#000";
+    ctx.lineWidth = DOT_W;
+    ctx.lineCap = "round";
+    ctx.setLineDash([0.01, DOT_GAP]);
+    ctx.beginPath();
+    for (var i = 0; i < n; i++) {
+      var a = 2 * Math.PI * i / n, c = ORB * Math.cos(a), d = ORB * Math.sin(a);
+      var p = proj([c * e1[0] + d * e2[0], c * e1[1] + d * e2[1], c * e1[2] + d * e2[2]], cx, cy, s);
+      if (i === 0) ctx.moveTo(p[0], p[1]); else ctx.lineTo(p[0], p[1]);
+    }
+    ctx.closePath();
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // One binary: square, orbit, then far hole and its arrow, then near hole and its arrow. A hole's
   // arrow is always on top of its own disc, so that it cannot be hidden.
   function binary(ctx, y, phi, cx, cy, s) {
     var e1 = vec(y, 9), e2 = vec(y, 12);
     square(ctx, e1, e2, cx, cy, s);
+    orbit(ctx, e1, e2, cx, cy, s);
     var c = Math.cos(phi), d = Math.sin(phi);
     var pos = [c * e1[0] + d * e2[0], c * e1[1] + d * e2[1], c * e1[2] + d * e2[2]];
     var near = dot(pos, V) > 0 ? 1 : -1;     // +1: the hole at +pos is the nearer one
@@ -152,36 +185,85 @@
     });
   }
 
-  // Small L: corner and two end masses, centred on the point c, in the plane of u, v.
-  function ligo(ctx, c, u, v, cx, cy) {
-    var o = combo(combo(c, -ARM / 3, u), -ARM / 3, v);
-    var p0 = proj(o, cx, cy, 1), pu = proj(combo(o, ARM, u), cx, cy, 1), pv = proj(combo(o, ARM, v), cx, cy, 1);
-    ctx.strokeStyle = "#000";
-    ctx.lineWidth = 4;
+  // Half of an axis, from the origin to sg times the unit vector d; arrow head on the + half.
+  function axisHalf(ctx, d, sg, cx, cy) {
+    var a = proj([0, 0, 0], cx, cy, 1), b = proj([sg * AXIS * d[0], sg * AXIS * d[1], sg * AXIS * d[2]], cx, cy, 1);
+    var dx = b[0] - a[0], dy = b[1] - a[1], n = Math.hypot(dx, dy);
+    if (n < 1e-6) return;
+    var ux = dx / n, uy = dy / n, h = sg > 0 ? Math.min(AXIS_HEAD, 0.5 * n) : 0, w = 0.42 * h;
+    var bx = b[0] - h * ux, by = b[1] - h * uy;
+    ctx.strokeStyle = AXIS_COL;
+    ctx.fillStyle = AXIS_COL;
+    ctx.lineWidth = AXIS_W;
     ctx.lineCap = "butt";
-    ctx.beginPath();
-    ctx.moveTo(pu[0], pu[1]); ctx.lineTo(p0[0], p0[1]); ctx.lineTo(pv[0], pv[1]);
-    ctx.stroke();
-    ctx.fillStyle = "#000";
-    [p0, pu, pv].forEach(function (p) {
-      ctx.beginPath(); ctx.arc(p[0], p[1], MASS, 0, 2 * Math.PI); ctx.fill();
-    });
+    ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(bx, by); ctx.stroke();
+    if (sg > 0) {
+      ctx.beginPath();
+      ctx.moveTo(b[0], b[1]);
+      ctx.lineTo(bx - w * uy, by + w * ux);
+      ctx.lineTo(bx + w * uy, by - w * ux);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+
+  // ---- Earth: a sphere with north along z, drawn pixel by pixel for the current camera. The
+  // camera is orthographic, so both Earths look the same and share one image, redrawn on a drag. ----
+  var maskBits = null, earthCanvas = null, earthKey = null;
+  function loadMask() {
+    var raw = atob(window.precess_earth_mask);
+    maskBits = new Uint8Array(raw.length);
+    for (var i = 0; i < raw.length; i++) maskBits[i] = raw.charCodeAt(i);
+  }
+  function isLand(lat, lon) {   // degrees
+    var j = Math.min(179, Math.floor(90 - lat)), i = Math.floor(((lon + 180) % 360 + 360) % 360) % 360;
+    var b = j * 360 + i;
+    return (maskBits[b >> 3] >> (b & 7)) & 1;
+  }
+  function renderEarth() {
+    if (!maskBits) loadMask();
+    var n = EARTH_R * 4;       // the canvas has 2 device px per slide px
+    if (!earthCanvas) {
+      earthCanvas = document.createElement("canvas");
+      earthCanvas.width = earthCanvas.height = n;
+    }
+    var c = earthCanvas.getContext("2d"), im = c.createImageData(n, n), d = im.data;
+    var L = [-0.4, 0.5, 0.77], r = n / 2 - 1;
+    for (var j = 0; j < n; j++) {
+      for (var i = 0; i < n; i++) {
+        var x = (i + 0.5 - n / 2) / r, y = (n / 2 - j - 0.5) / r, q = x * x + y * y, k = 4 * (j * n + i);
+        var edge = (1 - Math.sqrt(q)) * r + 0.5;
+        if (edge <= 0) continue;
+        var z = q < 1 ? Math.sqrt(1 - q) : 0;
+        var wx = x * R[0] + y * U[0] + z * V[0], wy = x * R[1] + y * U[1] + z * V[1], wz = x * R[2] + y * U[2] + z * V[2];
+        var lat = Math.asin(Math.max(-1, Math.min(1, wz))) * 180 / Math.PI;
+        var lon = Math.atan2(wy, wx) * 180 / Math.PI + LON0;
+        var col = isLand(lat, lon) ? LAND : OCEAN;
+        var sh = 0.62 + 0.45 * Math.max(0, x * L[0] + y * L[1] + z * L[2]);
+        d[k] = Math.min(255, col[0] * sh);
+        d[k + 1] = Math.min(255, col[1] * sh);
+        d[k + 2] = Math.min(255, col[2] * sh);
+        d[k + 3] = 255 * Math.min(1, edge);
+      }
+    }
+    c.putImageData(im, 0, 0);
+  }
+  function earth(ctx, pos, cx, cy) {
+    var p = proj(pos, cx, cy, 1);
+    ctx.drawImage(earthCanvas, p[0] - EARTH_R, p[1] - EARTH_R, 2 * EARTH_R, 2 * EARTH_R);
   }
 
   // ---- fixed non-precessing state: everything along z ----
   var FIXED = [0, 0, 1, 0, 0, SPIN, 0, 0, SPIN,
                Math.cos(YAW), Math.sin(YAW), 0, -Math.sin(YAW), Math.cos(YAW), 0];
 
-  // Detector positions and arm directions (the plane of each L is perpendicular to the line
-  // from the binary to the detector).
-  var D_PERP = [Math.cos(PERP_AZ), -Math.sin(PERP_AZ), 0];   // towards the camera side
-  var LIGO_J = { c: [0, 0, DIST_J], u: [1, 0, 0], v: [0, 1, 0] };
-  var LIGO_PERP = { c: [DIST_PERP * D_PERP[0], DIST_PERP * D_PERP[1], 0],
-                    u: [Math.sin(PERP_AZ), Math.cos(PERP_AZ), 0], v: [0, 0, 1] };
+  var EARTHS = [[0, 0, EARTH_D], [EARTH_D, 0, 0]];
+  var AXES = [{ d: [1, 0, 0], name: "x" }, { d: [0, 1, 0], name: "y" }, { d: [0, 0, 1], name: "z" }];
 
   // ---- one widget: simulation clock, canvas, one rAF loop ----
   // running(k): is the animation on at stage k. paint(ctx, y, phi): draw one frame.
-  function makeWidget(id, steps, startStage, paint) {
+  // onEnter(slide), if given, runs each time the slide is entered.
+  function makeWidget(id, steps, startStage, paint, onEnter) {
     var ctx = null, raf = null, last = null, y = initialState(), n = 0, acc = 0, on = false;
     function clear() {
       ctx.setTransform(2, 0, 0, 2, 0, 0);
@@ -204,6 +286,7 @@
       steps: steps,
       enter: function (slide) {
         ctx = slide.querySelector("canvas").getContext("2d");
+        if (onEnter) onEnter(slide);
         stop();
       },
       leave: stop,
@@ -219,13 +302,71 @@
   }
 
   makeWidget("precess-compare", 1, 1, function (ctx, y, phi) {
+    setCamera(0, EL - Math.PI / 2);
     binary(ctx, FIXED, phi, PANELS[0], CY_CMP, S_CMP);
     binary(ctx, y, phi, PANELS[1], CY_CMP, S_CMP);
   });
 
+  // ---- second slide: camera, drag, axis labels ----
+  var camYaw = YAW_DET, camPitch = EL_DET - Math.PI / 2, wired = false, drag = null, labels = null;
+
+  function wireDrag(canvas) {
+    function end() { drag = null; canvas.classList.remove("precess-grabbing"); }
+    canvas.addEventListener("pointerdown", function (e) {
+      canvas.setPointerCapture(e.pointerId);
+      drag = { x: e.clientX, y: e.clientY, k: canvas.getBoundingClientRect().width / 1920 };
+      canvas.classList.add("precess-grabbing");
+    });
+    canvas.addEventListener("pointermove", function (e) {
+      if (!drag) return;
+      camYaw += (e.clientX - drag.x) / drag.k * DRAG;
+      camPitch = Math.max(-Math.PI, Math.min(0, camPitch + (e.clientY - drag.y) / drag.k * DRAG));
+      drag.x = e.clientX; drag.y = e.clientY;
+    });
+    canvas.addEventListener("pointerup", end);
+    canvas.addEventListener("pointercancel", end);
+  }
+
+  // Beside the arrow tip, on the side away from the axis's own line: to the right of a
+  // vertical axis, above a horizontal one.
+  function placeLabel(el, d, cx, cy) {
+    var o = proj([0, 0, 0], cx, cy, 1), t = proj([AXIS * d[0], AXIS * d[1], AXIS * d[2]], cx, cy, 1);
+    var dx = t[0] - o[0], dy = t[1] - o[1], n = Math.hypot(dx, dy) || 1;
+    var px = dy / n, py = -dx / n;
+    if (py > 0.2 || (py > -0.2 && px < 0)) { px = -px; py = -py; }
+    el.style.left = (t[0] + LABEL_OFF * px) + "px";
+    el.style.top = (t[1] + LABEL_OFF * py) + "px";
+  }
+
   makeWidget("precess-detectors", 0, 0, function (ctx, y, phi) {
-    ligo(ctx, LIGO_J.c, LIGO_J.u, LIGO_J.v, CX_DET, CY_DET);
-    ligo(ctx, LIGO_PERP.c, LIGO_PERP.u, LIGO_PERP.v, CX_DET, CY_DET);
-    binary(ctx, y, phi, CX_DET, CY_DET, 1);
+    setCamera(camYaw, camPitch);
+    var key = camYaw + "," + camPitch;
+    if (key !== earthKey) { renderEarth(); earthKey = key; }
+    var cx = CX_DET, cy = CY_DET;
+    function halves(near) {   // one half of each axis lies behind the binary, one in front
+      AXES.forEach(function (a) {
+        var sg = dot(a.d, V) >= 0 ? 1 : -1;
+        axisHalf(ctx, a.d, near ? sg : -sg, cx, cy);
+      });
+    }
+    function earths(near) {
+      EARTHS.forEach(function (c) { if ((dot(c, V) >= 0) === near) earth(ctx, c, cx, cy); });
+    }
+    earths(false);
+    halves(false);
+    binary(ctx, y, phi, cx, cy, S_DET);
+    halves(true);
+    earths(true);
+    AXES.forEach(function (a) { placeLabel(labels[a.name], a.d, cx, cy); });
+  }, function (slide) {
+    var canvas = slide.querySelector("canvas");
+    if (!wired) {
+      wireDrag(canvas);
+      labels = {};
+      AXES.forEach(function (a) { labels[a.name] = slide.querySelector(".precess-axis-" + a.name); });
+      wired = true;
+    }
+    camYaw = YAW_DET;
+    camPitch = EL_DET - Math.PI / 2;
   });
 })();
