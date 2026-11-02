@@ -23,7 +23,9 @@
 }
 
 .ai-use-thumb {
-  font-family: "Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
+  height: 60px;
+  vertical-align: -8px;
+  margin-left: 16px;
 }
 
 .ai-use-link {

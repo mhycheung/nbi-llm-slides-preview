@@ -1,2 +1,4 @@
 project_flow.svg: the diagram in the README of the open-science repository, docs/figures/project_flow.svg
 (github.com/mhycheung/open-science), by the presenter; CC-BY-4.0.
+thumb_up.svg, thumb_down.svg: Twemoji 1f44d and 1f44e (github.com/jdecked/twemoji), CC-BY-4.0. Images rather than
+emoji characters, so that they do not depend on the fonts of the machine that shows the talk.
