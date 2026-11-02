@@ -8,7 +8,11 @@
 // the four nodes on the equator, where the wave vanishes at that instant.
 //
 // Slide sphere-precess: the precessing binary and its axes; at the next stage the same sphere around it.
-// Clicking a viewing direction (without dragging) highlights its ring or bar; clicking again removes it.
+// Clicking a viewing direction (without dragging) puts a red circle around its ring, bar or segment, in the
+// tangent plane; clicking it again removes the circle, and clicking another direction moves it there.
+// On the sphere, the side panel shows the highlighted direction, in its tangent plane seen from
+// outside: a large ring with the stretch bar, a toy L detector, and the detector's output over time.
+// Dragging the L rotates the detector; the output is s = (1/2) (u.h.u - v.h.v), u, v the unit arms.
 //
 // Field, the one formula for everything drawn. With e1, e2 the orbit's in-plane axes and
 // Q = (1/2)[cos 2Phi (e1 e1 - e2 e2) + sin 2Phi (e1 e2 + e2 e1)], projected on e_theta, e_phi, normalised by 2:
@@ -117,7 +121,12 @@
   // so that what is inside the sphere is visible but clearly behind the surface.
   var H_MIN = 0.12, SH_MAX = 0.34, SURF = 0.66;
   var SPIN_PX = 103, SHAFT = 4, HEAD = 15, COL = "#d00000";   // spin arrows, px per unit of spin; highlight colour
+  var HL_R_SEG = 33, HL_R_RING = 140, HL_W = 4;   // highlight circle radius around a segment, around a ring; width, slide px
   var PICK_MOVE = 6, PICK_R = 28, PICK_RING = 110;   // a click moves less than this; reach of a click, slide px
+  // Side panel, slide px: ring, L and trace, one above the other, right of the sphere and its axes.
+  var PAN_X = 1670, RING_Y = 175, RING_R = 120, RING_DOT = 8, PAN_DISP = 0.45, PAN_BAR = 120;
+  var L_Y = 505, L_ARM = 150, L_W = 7, L_MASS = 11, L_GUIDE = 160;
+  var TR_X0 = 1450, TR_X1 = 1890, TR_Y = 850, TR_AMP = 125, TR_SECONDS = 6, HIST = 1024;
   var SH_N = 256;           // shading image, pixels per side; smooth, so scaled up to the sphere
   var XF_MS = 450, MORPH_MS = 1000;    // crossfade and move-to-sphere durations
 
@@ -414,7 +423,7 @@
     evalField(j);
     var hd = 0.5 * DISP * hMag;
     ctx.globalAlpha = alpha;
-    ctx.fillStyle = hl[j] ? COL : "#000";
+    ctx.fillStyle = "#000";
     ctx.beginPath();
     for (var k = 0; k < NM; k++) {
       var a = R0 * MC[k], b = R0 * MS[k], ap = 2 * (a * cPsi + b * sPsi);
@@ -440,7 +449,7 @@
     var ax = half * (cPsi * Tx3[j] + sPsi * Px3[j]), ay = half * (cPsi * Ty3[j] + sPsi * Py3[j]), az = half * cPsi * Tz3[j];
     var x = DIST * Nx[j], y = DIST * Ny[j], z = DIST * Nz[j];
     ctx.globalAlpha = alpha * fade;
-    ctx.strokeStyle = hl[j] ? COL : "#000";
+    ctx.strokeStyle = "#000";
     ctx.lineCap = "butt";
     ctx.lineWidth = BAR_W + (whiskerWidth(hMag, Math.max(0, Z[j])) - BAR_W) * m;
     ctx.beginPath();
@@ -458,7 +467,7 @@
     ctx.lineCap = "round";
     for (var i = 0; i < NG; i++) {
       var j = order[i], z = Z[j];
-      if (z < 0 || hl[j]) continue;
+      if (z < 0) continue;
       evalField(j);
       var u = hMag;
       var dx = half * u * (cPsi * TX[j] + sPsi * PX[j]);
@@ -475,24 +484,40 @@
         ctx.fill();
       }
     }
-    // Highlighted directions on the near side, on top: a bar in colour, and a dot that stays when |h| = 0.
-    ctx.strokeStyle = COL;
-    ctx.fillStyle = COL;
+    ctx.globalAlpha = 1;
+    // The highlighted direction on the near side, on top. A ring direction has no grid segment of its own.
     Object.keys(hl).forEach(function (key) {
       var j = +key, z = Z[j];
-      if (z < 0) return;
-      evalField(j);
-      var dx = half * hMag * (cPsi * TX[j] + sPsi * PX[j]), dy = half * hMag * (cPsi * TY[j] + sPsi * PY[j]);
-      ctx.globalAlpha = m;
-      ctx.lineWidth = 2 * whiskerWidth(hMag, z);
-      ctx.beginPath();
-      ctx.moveTo(X[j] - dx, Y[j] - dy);
-      ctx.lineTo(X[j] + dx, Y[j] + dy);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(X[j], Y[j], 6, 0, 2 * Math.PI);
-      ctx.fill();
+      if (z < 0 || (j >= NG && m < 1)) return;
+      if (j >= NG) {
+        evalField(j);
+        var dx = half * hMag * (cPsi * TX[j] + sPsi * PX[j]), dy = half * hMag * (cPsi * TY[j] + sPsi * PY[j]);
+        ctx.strokeStyle = "#000";
+        ctx.lineWidth = whiskerWidth(hMag, z);
+        ctx.beginPath();
+        ctx.moveTo(X[j] - dx, Y[j] - dy);
+        ctx.lineTo(X[j] + dx, Y[j] + dy);
+        ctx.stroke();
+      }
+      drawHlCircle(ctx, j, HL_R_SEG, j < NG ? m : 1);
     });
+    ctx.globalAlpha = 1;
+  }
+
+  // A circle of radius r in the tangent plane at j, so it is an ellipse where the plane is foreshortened.
+  function drawHlCircle(ctx, j, r, alpha) {
+    var f = r / DIST;
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = COL;
+    ctx.lineWidth = HL_W;
+    ctx.beginPath();
+    for (var i = 0; i < 48; i++) {
+      var a = 2 * Math.PI * i / 48, c = Math.cos(a), d = Math.sin(a);
+      var x = X[j] + f * (c * TX[j] + d * PX[j]), y = Y[j] + f * (c * TY[j] + d * PY[j]);
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.stroke();
     ctx.globalAlpha = 1;
   }
 
@@ -515,6 +540,7 @@
       Phi = 2 * Math.PI * (now - t0) / PERIOD;
       setOrbit([1, 0, 0], [0, 1, 0], Phi);
     }
+    record(now);
     var x = val(xf, now), m = val(morph, now);
     if (projDirty) reproject();
     ctx.setTransform(2, 0, 0, 2, 0, 0);
@@ -530,6 +556,7 @@
           if (m < 1) drawPlane(ctx, r, 1 - m);
           if (x < 1) drawRing(ctx, r, 1 - x);
           if (x > 0 && m < 1) drawBar(ctx, r, x, m);
+          if (hl[r.j] && m < 1) drawHlCircle(ctx, r.j, HL_R_RING + (HL_R_SEG - HL_R_RING) * m, 1);
         });
     }
 
@@ -560,14 +587,135 @@
     rings(true);
     drawAxes(ctx, DIST, AXIS, isNear);
     placeLabels();
+    if (panelOn()) drawPanel(ctx, now, m);
   }
 
+  // ---- side panel ----
   var raf = null, ctx = null, canvas = null, stage = 0, drag = null, wired = [];
+  var hlOrder = [], alpha = 0, rotating = null;   // alpha: arm 1 from e_phi towards -e_theta, rad
+  var histT = new Float64Array(HIST), histQ = new Float64Array(6 * HIST), histN = 0;
+  function record(now) {
+    var i = histN % HIST, k = 6 * i;
+    histT[i] = now;
+    histQ[k] = Qxx; histQ[k + 1] = Qxy; histQ[k + 2] = Qxz; histQ[k + 3] = Qyy; histQ[k + 4] = Qyz; histQ[k + 5] = Qzz;
+    histN++;
+  }
+  function activeDir() { return hlOrder.length ? hlOrder[hlOrder.length - 1] : -1; }
+  function panelOn() { return activeDir() >= 0 && ((prec && stage >= 1) || (!prec && stage >= 2)); }
+  // The output s = (1/2) (u.h.u - v.h.v) at direction j, from history entry i.
+  // With arms u = cos(alpha) a1 + sin(alpha) a2, v = -sin(alpha) a1 + cos(alpha) a2, a1 = e_phi, a2 = -e_theta:
+  // s = -h_+ cos 2 alpha - h_x sin 2 alpha.
+  function outputAt(j, i) {
+    var k = 6 * i, xx = histQ[k], xy = histQ[k + 1], xz = histQ[k + 2], yy = histQ[k + 3], yz = histQ[k + 4], zz = histQ[k + 5];
+    var tx = Tx3[j], ty = Ty3[j], tz = Tz3[j], px = Px3[j], py = Py3[j];
+    var ax = xx * tx + xy * ty + xz * tz, ay = xy * tx + yy * ty + yz * tz, az = xz * tx + yz * ty + zz * tz;
+    var bx = xx * px + xy * py, by = xy * px + yy * py;
+    var hp = tx * ax + ty * ay + tz * az - (px * bx + py * by), hx = 2 * (px * ax + py * ay);
+    return -hp * Math.cos(2 * alpha) - hx * Math.sin(2 * alpha);
+  }
+  // Panel axes in the tangent plane at j: the rotation of (a1, a2) closest to the camera's right and up,
+  // so that the panel shows the direction with the orientation it has on the sphere.
+  function panelFrame(j) {
+    var a1 = [Px3[j], Py3[j], 0], a2 = [-Tx3[j], -Ty3[j], -Tz3[j]];
+    var R = [cyw, -syw, 0], U = [syw * cpi, cyw * cpi, -spi];
+    var w = Math.atan2(dot(R, a2) - dot(U, a1), dot(R, a1) + dot(U, a2)), c = Math.cos(w), d = Math.sin(w);
+    return { a1: a1, a2: a2, c: c, d: d };   // panel x = c a1 + d a2, panel y = -d a1 + c a2
+  }
+  function drawPanel(ctx, now, m) {
+    var j = activeDir(), f = panelFrame(j);
+    evalField(j);
+    // Stretch axis in the (a1, a2) basis, then in the panel.
+    var a1c = sPsi, a2c = -cPsi;
+    var ax = f.c * a1c + f.d * a2c, ay = -f.d * a1c + f.c * a2c;
+    ctx.globalAlpha = m;
+
+    // Ring with the bar: a mass at p moves by (1/2) h.p, h = PAN_DISP |h| (2 a a - 1).
+    var hd = 0.5 * PAN_DISP * hMag;
+    ctx.fillStyle = "#000";
+    ctx.beginPath();
+    for (var k = 0; k < NM; k++) {
+      var x = RING_R * MC[k], y = RING_R * MS[k], ap = 2 * (x * ax + y * ay);
+      x += hd * (ap * ax - x);
+      y += hd * (ap * ay - y);
+      ctx.moveTo(PAN_X + x + RING_DOT, RING_Y - y);
+      ctx.arc(PAN_X + x, RING_Y - y, RING_DOT, 0, 2 * Math.PI);
+    }
+    ctx.fill();
+    var bl = PAN_BAR * hMag;
+    ctx.strokeStyle = "#000";
+    ctx.lineWidth = 10;
+    ctx.lineCap = "butt";
+    ctx.beginPath();
+    ctx.moveTo(PAN_X - bl * ax, RING_Y + bl * ay);
+    ctx.lineTo(PAN_X + bl * ax, RING_Y - bl * ay);
+    ctx.stroke();
+
+    // The L: arms in the panel, the rest position in gray, each end moved by (1/2) (u.h.u) times the arm.
+    var ca = Math.cos(alpha), sa = Math.sin(alpha);
+    var ux = f.c * ca + f.d * sa, uy = -f.d * ca + f.c * sa, vx = -uy, vy = ux;   // v is u turned by +90 deg
+    var i = (histN - 1) % HIST, out = outputAt(j, i), e = 0.5 * PAN_DISP * out;
+    var ox = -L_ARM / 3 * (ux + vx), oy = -L_ARM / 3 * (uy + vy);
+    function P(px, py) { return [PAN_X + px, L_Y - py]; }
+    function arms(lu, lv, col, w) {
+      var a = P(ox + lu * ux, oy + lu * uy), o = P(ox, oy), b = P(ox + lv * vx, oy + lv * vy);
+      ctx.strokeStyle = col;
+      ctx.lineWidth = w;
+      ctx.beginPath();
+      ctx.moveTo(a[0], a[1]); ctx.lineTo(o[0], o[1]); ctx.lineTo(b[0], b[1]);
+      ctx.stroke();
+      return [a, o, b];
+    }
+    ctx.strokeStyle = "#dcdcdc";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(PAN_X, L_Y, L_GUIDE, 0, 2 * Math.PI);
+    ctx.stroke();
+    var bn = Math.SQRT1_2, kn = P(L_GUIDE * bn * (ux + vx), L_GUIDE * bn * (uy + vy));
+    ctx.fillStyle = "#a0a0a0";
+    ctx.beginPath();
+    ctx.arc(kn[0], kn[1], 9, 0, 2 * Math.PI);
+    ctx.fill();
+    arms(L_ARM, L_ARM, "#c8c8c8", 3);
+    var pts = arms(L_ARM * (1 + e), L_ARM * (1 - e), "#000", L_W);
+    ctx.fillStyle = "#000";
+    pts.forEach(function (p) {
+      ctx.beginPath();
+      ctx.arc(p[0], p[1], L_MASS, 0, 2 * Math.PI);
+      ctx.fill();
+    });
+
+    // Output against time, the present at the right; recomputed for the detector's present angle.
+    ctx.strokeStyle = "#c8c8c8";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(TR_X0, TR_Y); ctx.lineTo(TR_X1, TR_Y);
+    ctx.stroke();
+    ctx.strokeStyle = "#000";
+    ctx.lineWidth = 3;
+    ctx.lineJoin = "round";
+    ctx.beginPath();
+    var first = true, n = Math.min(histN, HIST), lastX = TR_X1, lastY = TR_Y;
+    for (var q = 0; q < n; q++) {
+      var h = (histN - n + q) % HIST, age = (now - histT[h]) / 1000;
+      if (age > TR_SECONDS) continue;
+      var tx = TR_X1 - (TR_X1 - TR_X0) * age / TR_SECONDS, ty = TR_Y - TR_AMP * outputAt(j, h);
+      if (first) { ctx.moveTo(tx, ty); first = false; } else ctx.lineTo(tx, ty);
+      lastX = tx; lastY = ty;
+    }
+    ctx.stroke();
+    ctx.fillStyle = COL;
+    ctx.beginPath();
+    ctx.arc(lastX, lastY, 7, 0, 2 * Math.PI);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
   function loop(now) { draw(ctx, now); raf = requestAnimationFrame(loop); }
   function stop() { if (raf) cancelAnimationFrame(raf); raf = null; }
   function resetCamera() { yaw = YAW0; pitch = PITCH0; projDirty = true; }
   function endDrag() {
     drag = null;
+    rotating = null;
     if (canvas) canvas.classList.remove("sphere-grabbing");
   }
 
@@ -587,17 +735,38 @@
       });
     }
     if (best < 0) return;
-    if (hl[best]) delete hl[best]; else hl[best] = true;
+    // One highlight at a time: the same direction clears it, another moves it.
+    var had = hl[best];
+    hl = {}; hlOrder = [];
+    if (!had) {
+      hl[best] = true;
+      hlOrder.push(best);
+      alpha = 0;
+    }
   }
 
   // ---- drag, as in the workshop sphere; deltas are converted to slide pixels ----
   function wire(c) {
     c.addEventListener("pointerdown", function (e) {
       c.setPointerCapture(e.pointerId);
-      drag = { x: e.clientX, y: e.clientY, k: c.getBoundingClientRect().width / 1920, moved: 0 };
+      var r = c.getBoundingClientRect(), k = r.width / 1920;
+      var px = (e.clientX - r.left) / k - PAN_X, py = L_Y - (e.clientY - r.top) / k;
+      if (panelOn() && Math.hypot(px, py) < L_GUIDE + 25) {   // the detector, not the camera
+        rotating = { angle: Math.atan2(py, px) };
+        c.classList.add("sphere-grabbing");
+        return;
+      }
+      drag = { x: e.clientX, y: e.clientY, k: k, moved: 0 };
       c.classList.add("sphere-grabbing");
     });
     c.addEventListener("pointermove", function (e) {
+      if (rotating) {
+        var r = c.getBoundingClientRect(), k = r.width / 1920;
+        var a = Math.atan2(L_Y - (e.clientY - r.top) / k, (e.clientX - r.left) / k - PAN_X);
+        alpha += a - rotating.angle;
+        rotating.angle = a;
+        return;
+      }
       if (!drag) return;
       var dx = (e.clientX - drag.x) / drag.k, dy = (e.clientY - drag.y) / drag.k;
       drag.x = e.clientX; drag.y = e.clientY;
@@ -626,7 +795,7 @@
     labels = {};
     AXES.forEach(function (a) { labels[a.name] = slide.querySelector(".sphere-axis-" + a.name); });
     prec = isPrec;
-    hl = {};
+    hl = {}; hlOrder = []; alpha = 0; rotating = null; histN = 0;
     t0 = performance.now();
     yS = initialState(); nS = 0; accS = 0; lastS = null;
     set(xf, isPrec ? 1 : 0, t0, true); set(morph, 0, t0, true);
@@ -651,6 +820,15 @@
       camera: function () { return { yaw: yaw, pitch: pitch }; },
       setCamera: function (y, p) { yaw = y; pitch = p; projDirty = true; },
       shadeLevel: shadeLevel,
+      panel: function () {
+        var j = activeDir(), i = (histN - 1) % HIST;
+        return { j: j, alpha: alpha, on: panelOn(), output: j >= 0 && histN ? outputAt(j, i) : null,
+                 trace: j >= 0 ? Array.from({ length: Math.min(histN, HIST) }, function (_, q) { return outputAt(j, q); }) : [],
+                 n: j >= 0 ? [Nx[j], Ny[j], Nz[j]] : null, T: j >= 0 ? [Tx3[j], Ty3[j], Tz3[j]] : null, P: j >= 0 ? [Px3[j], Py3[j], 0] : null,
+                 Q: [Qxx, Qxy, Qxz, Qyy, Qyz, Qzz] };
+      },
+      select: function (j, a) { hl = {}; hl[j] = true; hlOrder = [j]; alpha = a; },
+      setAlpha: function (a) { alpha = a; },
       highlighted: function () { return Object.keys(hl).map(Number); },
       screenOf: function (j) { if (projDirty) reproject(); return [X[j], Y[j], Z[j]]; },
       constants: { DIST: DIST, ORB: ORB, BH: BH, R0: R0, DOT: DOT, DISP: DISP, BAR_HALF: BAR_HALF,
@@ -677,6 +855,15 @@
       set(morph, k >= 1 ? 1 : 0, performance.now(), dir < 0, MORPH_MS);
     },
     _check: {
+      panel: function () {
+        var j = activeDir(), i = (histN - 1) % HIST;
+        return { j: j, alpha: alpha, on: panelOn(), output: j >= 0 && histN ? outputAt(j, i) : null,
+                 trace: j >= 0 ? Array.from({ length: Math.min(histN, HIST) }, function (_, q) { return outputAt(j, q); }) : [],
+                 n: j >= 0 ? [Nx[j], Ny[j], Nz[j]] : null, T: j >= 0 ? [Tx3[j], Ty3[j], Tz3[j]] : null, P: j >= 0 ? [Px3[j], Py3[j], 0] : null,
+                 Q: [Qxx, Qxy, Qxz, Qyy, Qyz, Qzz] };
+      },
+      select: function (j, a) { hl = {}; hl[j] = true; hlOrder = [j]; alpha = a; },
+      setAlpha: function (a) { alpha = a; },
       state: function () { return { y: yS, Phi: OMEGA * nS * DT }; },
       highlighted: function () { return Object.keys(hl).map(Number); }
     }

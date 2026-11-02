@@ -3,7 +3,8 @@
 // data and waveform of both detectors. Data: window.gw231123_data (assets/data.js).
 // Each tile has h_+, h_x, in the source's L frame at f_ref = 10 Hz. A bar is along the stretch axis
 // cos(psi) e_theta + sin(psi) e_phi, psi = (1/2) atan2(h_x, h_+), length proportional to |h|.
-// The surface is gray in log |h|. A click highlights a direction; the actual one starts highlighted.
+// The surface is gray in log |h|. A click puts a red circle around a direction's bar, in the tangent plane;
+// the same direction clears it, another moves it. The actual direction starts highlighted.
 (function () {
   "use strict";
 
@@ -13,6 +14,7 @@
   var H_MIN = 0.03, SH_MAX = 0.36;   // gray level 1 - SH_MAX * s, s = 1 + log|h| / log(1 / H_MIN), clipped to 0..1
   var SH_N = 256, TW = 256, TH = 128;   // shading image; table of |h| in (phi, theta)
   var COL = "#d00000";           // highlight and time cursor
+  var HL_R = 48, HL_W = 4.5;     // highlight circle radius and width, slide px: around the longest bar
   var PICK_MOVE = 6, PICK_R = 40;   // a click moves less than this; reach of a click, slide px
   var PX0 = 1300, PX1 = 1880;    // whitened traces: horizontal extent, and each row's top and bottom
   var ROWS = [{ ifo: "H1", top: 170, bot: 500 }, { ifo: "L1", top: 610, bot: 940 }];
@@ -191,10 +193,10 @@
     var off = f * n * 2, half = 0.5 * BAR;
     ctx.strokeStyle = "#000";
     ctx.lineCap = "round";
-    function bar(j, wide) {
+    function bar(j) {
       var psi = 0.5 * Math.atan2(frames[off + 2 * j + 1], frames[off + 2 * j]), c = Math.cos(psi), s = Math.sin(psi);
       var u = H[j], dx = half * u * (c * TX[j] + s * PX[j]), dy = half * u * (c * TY[j] + s * PY[j]);
-      ctx.lineWidth = wide * width(u, Z[j]);
+      ctx.lineWidth = width(u, Z[j]);
       ctx.beginPath();
       ctx.moveTo(X[j] - dx, Y[j] - dy);
       ctx.lineTo(X[j] + dx, Y[j] + dy);
@@ -202,20 +204,24 @@
     }
     for (var i = 0; i < n; i++) {
       var j = order[i];
-      if (Z[j] < 0 || hl[j]) continue;
+      if (Z[j] < 0) continue;
       ctx.globalAlpha = 0.55 + 0.45 * Z[j];
-      bar(j, 1);
+      bar(j);
     }
     ctx.globalAlpha = 1;
     ctx.strokeStyle = COL;
-    ctx.fillStyle = COL;
+    ctx.lineWidth = HL_W;
     Object.keys(hl).forEach(function (key) {
       var j = +key;
       if (Z[j] < 0) return;
-      bar(j, 2.2);
       ctx.beginPath();
-      ctx.arc(X[j], Y[j], 6, 0, 2 * Math.PI);
-      ctx.fill();
+      for (var i = 0; i < 48; i++) {
+        var a = 2 * Math.PI * i / 48, c = Math.cos(a), d = Math.sin(a);
+        var x = X[j] + HL_R * (c * TX[j] + d * PX[j]), y = Y[j] + HL_R * (c * TY[j] + d * PY[j]);
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+      ctx.stroke();
     });
   }
 
@@ -253,7 +259,9 @@
       if (d < bestD) { bestD = d; best = j; }
     }
     if (best < 0) return;
-    if (hl[best]) delete hl[best]; else hl[best] = true;
+    var had = hl[best];
+    hl = {};
+    if (!had) hl[best] = true;
   }
 
   function wire() {
