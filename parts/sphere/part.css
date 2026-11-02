@@ -1,0 +1,10 @@
+.sphere-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1920px;
+  height: 1080px;
+  touch-action: none;
+}
+.sphere-canvas.sphere-grab { cursor: grab; }
+.sphere-canvas.sphere-grabbing { cursor: grabbing; }

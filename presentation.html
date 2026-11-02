@@ -11,6 +11,7 @@
 <link rel="stylesheet" href="parts/ai-use/part.css">
 <link rel="stylesheet" href="parts/gw-ring/part.css">
 <link rel="stylesheet" href="parts/polar/part.css">
+<link rel="stylesheet" href="parts/sphere/part.css">
 </head>
 <body>
 <div class="deck">
@@ -82,7 +83,9 @@
   <canvas class="polar-canvas" width="3840" height="2160"></canvas>
 </section>
 <!-- part: sphere -->
-<section class="slide" id="sphere-slide"></section>
+<section class="slide" id="sphere-slide">
+  <canvas id="sphere-canvas" class="sphere-canvas" width="3840" height="2160"></canvas>
+</section>
 <div class="deck-progress"><div class="deck-progress-track"><div class="deck-progress-fill"></div></div><div class="deck-progress-knob"></div></div>
 <div class="deck-clock"></div>
 </div>
@@ -92,6 +95,7 @@
 <script src="parts/ai-use/part.js"></script>
 <script src="parts/gw-ring/part.js"></script>
 <script src="parts/polar/part.js"></script>
+<script src="parts/sphere/part.js"></script>
 <script>Deck.start();</script>
 </body>
 </html>
