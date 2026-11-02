@@ -7,17 +7,24 @@
 <title>polar</title>
 <link rel="stylesheet" href="vendor/katex/katex.min.css">
 <link rel="stylesheet" href="common/deck.css">
-
+<link rel="stylesheet" href="parts/polar/part.css">
 </head>
 <body>
 <div class="deck">
 <!-- part: polar -->
-<section class="slide" id="polar-circular"></section>
+<section class="slide" id="polar-circular">
+  <h1 class="title">Circular polarization</h1>
+  <canvas class="polar-canvas" width="3840" height="2160"></canvas>
+</section>
+<section class="slide" id="polar-plus">
+  <h1 class="title">Plus polarization</h1>
+  <canvas class="polar-canvas" width="3840" height="2160"></canvas>
+</section>
 </div>
 <script src="vendor/katex/katex.min.js"></script>
 <script src="vendor/katex/auto-render.min.js"></script>
 <script src="common/deck.js"></script>
-
+<script src="parts/polar/part.js"></script>
 <script>Deck.start();</script>
 </body>
 </html>
