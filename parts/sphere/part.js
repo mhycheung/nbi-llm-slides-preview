@@ -7,14 +7,88 @@
 // square are inside the sphere, seen through its surface; the surface is shaded by log |h|, white at
 // the four nodes on the equator, where the wave vanishes at that instant.
 //
-// Field, the one formula for everything drawn. With Q = (1/2)[cos 2Phi (xx - yy)
-// + sin 2Phi (xy + yx)] projected on the tangent vectors e_theta, e_phi and normalised by 2:
-//   h_+ = (Q_tt - Q_pp) = (1 + cos^2 theta)/2 cos 2(Phi - phi)
-//   h_x = 2 Q_tp        = cos theta sin 2(Phi - phi)
-// so |h| = 1 at the poles and at most 1/2 on the equator. The stretch axis is
-// cos(psi) e_theta + sin(psi) e_phi with psi = (1/2) atan2(h_x, h_+).
+// Slide sphere-precess: the precessing binary and its axes; at the next stage the same sphere around it.
+// Clicking a viewing direction (without dragging) highlights its ring or bar; clicking again removes it.
+//
+// Field, the one formula for everything drawn. With e1, e2 the orbit's in-plane axes and
+// Q = (1/2)[cos 2Phi (e1 e1 - e2 e2) + sin 2Phi (e1 e2 + e2 e1)], projected on e_theta, e_phi, normalised by 2:
+//   h_+ = Q_tt - Q_pp,  h_x = 2 Q_tp
+// For e1 = x, e2 = y this is h_+ = (1 + cos^2 theta)/2 cos 2(Phi - phi), h_x = cos theta sin 2(Phi - phi),
+// so |h| = 1 at the poles and at most 1/2 on the equator. In general |h|^2 = 1 - 4 |Q n|^2 + (n . Q n)^2.
+// The stretch axis is cos(psi) e_theta + sin(psi) e_phi with psi = (1/2) atan2(h_x, h_+).
+// With precession this is the instantaneous quadrupole of the tilted orbit, a schematic: no retardation.
 (function () {
   "use strict";
+
+  // ---- PHYSICS BEGIN (tests extract this block; no DOM below this line until PHYSICS END) ----
+  // Orbit-averaged equal-mass precession, coupling exaggerated, no spin-spin term:
+  //   dL/dt = k S x L,  dS_i/dt = k L x S_i,  S = S1 + S2,  J = L + S conserved.
+  // L then precesses about J at rate k|J|. World axes: z along J.
+  // Units of L, S: |L| = 1. Time in seconds.
+  var PERIOD_S = 4;          // orbital period, s (as in gw-ring)
+  var N_PREC = 5;           // orbital periods per precession period
+  var THETA = 30 * Math.PI / 180;   // opening angle between L and J
+  var SMAG = 1.5;           // |S|
+  var SPLIT = 22 * Math.PI / 180;   // angle of each spin from S
+  var YAW = 25 * Math.PI / 180;     // square edges against the camera's right axis
+  // S on the far side of J from L, so that J = L + S lies at THETA from L: |S| sin(THETA_S) = sin(THETA).
+  // SMAG > 1 and SPLIT keep every spin at most THETA_S + SPLIT = 41.5 deg from J, away from the
+  // camera direction (52 deg from J), so that no arrow shrinks to a dot on screen.
+  var THETA_S = Math.asin(Math.sin(THETA) / SMAG);
+  var JMAG = Math.cos(THETA) + SMAG * Math.cos(THETA_S);
+  var K = 2 * Math.PI / (N_PREC * PERIOD_S * JMAG);
+  var DT = 1 / 120;         // fixed RK4 step, s
+  var OMEGA = 2 * Math.PI / PERIOD_S;
+  var SPIN = SMAG / (2 * Math.cos(SPLIT));   // |S1| = |S2|
+
+  function cross(a, b) {
+    return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  }
+  function dot(a, b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
+  function combo(a, f, b) { return [a[0] + f * b[0], a[1] + f * b[1], a[2] + f * b[2]]; }
+
+  // State: 15 numbers, L, S1, S2, e1, e2 (three each).
+  function vec(y, i) { return [y[i], y[i + 1], y[i + 2]]; }
+  function deriv(y) {
+    var L = vec(y, 0), S1 = vec(y, 3), S2 = vec(y, 6), e1 = vec(y, 9), e2 = vec(y, 12);
+    var S = combo(S1, 1, S2);
+    var dL = cross(S, L), n2 = dot(L, L);
+    dL = [K * dL[0], K * dL[1], K * dL[2]];
+    var dS1 = cross(L, S1), dS2 = cross(L, S2);
+    // Transport without twist: de/dt = -Lhat (dLhat/dt . e), and |L| is constant here.
+    var a1 = -dot(dL, e1) / n2, a2 = -dot(dL, e2) / n2;
+    return [dL[0], dL[1], dL[2],
+            K * dS1[0], K * dS1[1], K * dS1[2],
+            K * dS2[0], K * dS2[1], K * dS2[2],
+            a1 * L[0], a1 * L[1], a1 * L[2],
+            a2 * L[0], a2 * L[1], a2 * L[2]];
+  }
+  function rk4(y, h) {
+    var n = y.length, i, t = new Array(n);
+    var k1 = deriv(y);
+    for (i = 0; i < n; i++) t[i] = y[i] + 0.5 * h * k1[i];
+    var k2 = deriv(t);
+    for (i = 0; i < n; i++) t[i] = y[i] + 0.5 * h * k2[i];
+    var k3 = deriv(t);
+    for (i = 0; i < n; i++) t[i] = y[i] + h * k3[i];
+    var k4 = deriv(t);
+    var out = new Array(n);
+    for (i = 0; i < n; i++) out[i] = y[i] + h * (k1[i] + 2 * k2[i] + 2 * k3[i] + k4[i]) / 6;
+    return out;
+  }
+  // L tilted by THETA towards +x, S towards -x; the spins split along +-y.
+  function initialState() {
+    var L = [Math.sin(THETA), 0, Math.cos(THETA)], Sh = [-Math.sin(THETA_S), 0, Math.cos(THETA_S)];
+    var d = SPIN * Math.sin(SPLIT), m = SPIN * Math.cos(SPLIT);
+    var S1 = [m * Sh[0], d, m * Sh[2]], S2 = [m * Sh[0], -d, m * Sh[2]];
+    // e1: the fixed square's edge direction, made perpendicular to L; e1 x e2 = L.
+    var f = [Math.cos(YAW), Math.sin(YAW), 0];
+    var e1 = combo(f, -dot(f, L), L), n = Math.sqrt(dot(e1, e1));
+    e1 = [e1[0] / n, e1[1] / n, e1[2] / n];
+    var e2 = cross(L, e1);
+    return L.concat(S1, S2, e1, e2);
+  }
+  // ---- PHYSICS END ----
 
   var PERIOD = 4000;        // orbital period, ms
   var CX = 960, CY = 540;   // slide centre, slide px
@@ -42,6 +116,8 @@
   // |h| = 1 at the poles gives s = 1, |h| <= H_MIN gives s = 0: white. SURF is the surface's opacity,
   // so that what is inside the sphere is visible but clearly behind the surface.
   var H_MIN = 0.12, SH_MAX = 0.34, SURF = 0.66;
+  var SPIN_PX = 103, SHAFT = 4, HEAD = 15, COL = "#d00000";   // spin arrows, px per unit of spin; highlight colour
+  var PICK_MOVE = 6, PICK_R = 28, PICK_RING = 110;   // a click moves less than this; reach of a click, slide px
   var SH_N = 256;           // shading image, pixels per side; smooth, so scaled up to the sphere
   var XF_MS = 450, MORPH_MS = 1000;    // crossfade and move-to-sphere durations
 
@@ -63,13 +139,10 @@
   var NP = NG + 4;
   function F() { return new Float64Array(NP); }
   var Nx = F(), Ny = F(), Nz = F(), Tx3 = F(), Ty3 = F(), Tz3 = F(), Px3 = F(), Py3 = F();
-  var FA = F(), FB = F(), C2 = F(), S2 = F();   // (1+ct^2)/2, ct, cos 2phi, sin 2phi
   function addPoint(j, ct, st, cp, sp) {
     Nx[j] = st * cp; Ny[j] = st * sp; Nz[j] = ct;
     Tx3[j] = ct * cp; Ty3[j] = ct * sp; Tz3[j] = -st;
     Px3[j] = -sp; Py3[j] = cp;
-    FA[j] = (1 + ct * ct) / 2; FB[j] = ct;
-    C2[j] = cp * cp - sp * sp; S2[j] = 2 * sp * cp;
   }
   var GOLDEN = (1 + Math.sqrt(5)) / 2;
   for (var g = 0; g < NG; g++) {
@@ -92,11 +165,26 @@
   }
 
   // ---- field at point j for the current orbital phase ----
-  var c2Phi = 1, s2Phi = 0;      // cos 2Phi, sin 2Phi of the frame
+  // The orbit now: in-plane axes, normal, and the quadrupole of the phase.
+  var E1 = [1, 0, 0], E2 = [0, 1, 0], LN = [0, 0, 1];
+  var Qxx = 0, Qxy = 0, Qxz = 0, Qyy = 0, Qyz = 0, Qzz = 0;
+  function setOrbit(e1, e2, Phi) {
+    E1 = e1; E2 = e2; LN = cross(e1, e2);
+    var c = 0.5 * Math.cos(2 * Phi), d = 0.5 * Math.sin(2 * Phi);
+    Qxx = c * (e1[0] * e1[0] - e2[0] * e2[0]) + 2 * d * e1[0] * e2[0];
+    Qyy = c * (e1[1] * e1[1] - e2[1] * e2[1]) + 2 * d * e1[1] * e2[1];
+    Qzz = c * (e1[2] * e1[2] - e2[2] * e2[2]) + 2 * d * e1[2] * e2[2];
+    Qxy = c * (e1[0] * e1[1] - e2[0] * e2[1]) + d * (e1[0] * e2[1] + e1[1] * e2[0]);
+    Qxz = c * (e1[0] * e1[2] - e2[0] * e2[2]) + d * (e1[0] * e2[2] + e1[2] * e2[0]);
+    Qyz = c * (e1[1] * e1[2] - e2[1] * e2[2]) + d * (e1[1] * e2[2] + e1[2] * e2[1]);
+  }
   var hMag = 0, cPsi = 1, sPsi = 0;
   function evalField(j) {
-    var hp = FA[j] * (c2Phi * C2[j] + s2Phi * S2[j]);
-    var hx = FB[j] * (s2Phi * C2[j] - c2Phi * S2[j]);
+    var tx = Tx3[j], ty = Ty3[j], tz = Tz3[j], px = Px3[j], py = Py3[j];
+    var ax = Qxx * tx + Qxy * ty + Qxz * tz, ay = Qxy * tx + Qyy * ty + Qyz * tz, az = Qxz * tx + Qyz * ty + Qzz * tz;
+    var bx = Qxx * px + Qxy * py, by = Qxy * px + Qyy * py;
+    var hp = tx * ax + ty * ay + tz * az - (px * bx + py * by);
+    var hx = 2 * (px * ax + py * ay);
     var psi = 0.5 * Math.atan2(hx, hp);
     hMag = Math.sqrt(hp * hp + hx * hx);
     cPsi = Math.cos(psi); sPsi = Math.sin(psi);
@@ -137,7 +225,7 @@
   // shaded: seen through a node of the near one it would make that node gray.
   var NPX = SH_N * SH_N;
   function G() { return new Float32Array(NPX); }
-  var shA = G(), shB = G(), shC = G(), shS = G();
+  var shX = G(), shY = G(), shZ = G();
   var shCanvas = null, shCtx = null, shImg = null;
   function shadeTables() {
     for (var j = 0; j < SH_N; j++) {
@@ -148,12 +236,8 @@
         // Inverse of the camera: screen right u, up v, towards the camera w.
         var y1 = v * cpi + w * spi, z = -v * spi + w * cpi;
         var x = u * cyw + y1 * syw, y = -u * syw + y1 * cyw;
-        var k = j * SH_N + i, rho2 = x * x + y * y;
-        shA[k] = (1 + z * z) / 2;
-        shB[k] = z;
-        // cos 2phi, sin 2phi; at the pole itself phi has no meaning and |h| does not depend on it.
-        shC[k] = rho2 > 1e-12 ? (x * x - y * y) / rho2 : 1;
-        shS[k] = rho2 > 1e-12 ? 2 * x * y / rho2 : 0;
+        var k = j * SH_N + i;
+        shX[k] = x; shY[k] = y; shZ[k] = z;
       }
     }
   }
@@ -171,8 +255,11 @@
     }
     var d = shImg.data;
     for (var k = 0; k < NPX; k++) {
-      var hp = shA[k] * (c2Phi * shC[k] + s2Phi * shS[k]), hx = shB[k] * (s2Phi * shC[k] - c2Phi * shS[k]);
-      d[4 * k] = d[4 * k + 1] = d[4 * k + 2] = 255 * shadeLevel(hp * hp + hx * hx);
+      var x = shX[k], y = shY[k], z = shZ[k];
+      var a = Qxx * x + Qxy * y + Qxz * z, b = Qxy * x + Qyy * y + Qyz * z, c = Qxz * x + Qyz * y + Qzz * z;
+      var nQn = x * a + y * b + z * c;
+      var h2 = 1 - 4 * (a * a + b * b + c * c) + nQn * nQn;
+      d[4 * k] = d[4 * k + 1] = d[4 * k + 2] = 255 * shadeLevel(h2);
       d[4 * k + 3] = 255;
     }
     shCtx.putImageData(shImg, 0, 0);
@@ -201,9 +288,13 @@
     ctx.stroke();
     ctx.globalAlpha = 1;
   }
+  function inPlane(a, b) {   // the point a e1 + b e2
+    return [a * E1[0] + b * E2[0], a * E1[1] + b * E2[1], a * E1[2] + b * E2[2]];
+  }
+  function screen(p) { return [sx(p[0], p[1], 1), sy(p[0], p[1], p[2], 1)]; }
   function drawOrbitalPlate(ctx) {
     plate(ctx, [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(function (q) {
-      return [sx(ORB_SQ * q[0], ORB_SQ * q[1], 1), sy(ORB_SQ * q[0], ORB_SQ * q[1], 0, 1)];
+      return screen(inPlane(ORB_SQ * q[0], ORB_SQ * q[1]));
     }), 1);
   }
   // The dotted orbit and the holes.
@@ -215,20 +306,46 @@
     ctx.setLineDash([0.01, DOT_GAP]);
     ctx.beginPath();
     for (var i = 0; i < 120; i++) {
-      var a = 2 * Math.PI * i / 120, x = ORB * Math.cos(a), y = ORB * Math.sin(a);
-      if (i === 0) ctx.moveTo(sx(x, y, 1), sy(x, y, 0, 1)); else ctx.lineTo(sx(x, y, 1), sy(x, y, 0, 1));
+      var a = 2 * Math.PI * i / 120, p = screen(inPlane(ORB * Math.cos(a), ORB * Math.sin(a)));
+      if (i === 0) ctx.moveTo(p[0], p[1]); else ctx.lineTo(p[0], p[1]);
     }
     ctx.closePath();
     ctx.stroke();
     ctx.setLineDash([]);
 
-    var cp = ORB * Math.cos(Phi), sp = ORB * Math.sin(Phi);
+    var h = screen(inPlane(ORB * Math.cos(Phi), ORB * Math.sin(Phi)));
     ctx.fillStyle = "#000";
     ctx.beginPath();
-    ctx.arc(sx(cp, sp, 1), sy(cp, sp, 0, 1), BH, 0, 2 * Math.PI);
-    ctx.moveTo(sx(-cp, -sp, 1) + BH, sy(-cp, -sp, 0, 1));
-    ctx.arc(sx(-cp, -sp, 1), sy(-cp, -sp, 0, 1), BH, 0, 2 * Math.PI);
+    ctx.arc(h[0], h[1], BH, 0, 2 * Math.PI);
+    ctx.moveTo(2 * CX - h[0] + BH, 2 * CY - h[1]);
+    ctx.arc(2 * CX - h[0], 2 * CY - h[1], BH, 0, 2 * Math.PI);
     ctx.fill();
+  }
+
+  // Spin arrows of the precessing binary, those behind the plate or those in front of it.
+  function drawSpins(ctx, Phi, y, behind) {
+    var side = depth(LN[0], LN[1], LN[2]) >= 0 ? 1 : -1;
+    [1, -1].forEach(function (sg) {
+      var S = vec(y, sg > 0 ? 3 : 6);
+      if ((dot(S, LN) * side < 0) !== behind) return;
+      var P0 = inPlane(sg * ORB * Math.cos(Phi), sg * ORB * Math.sin(Phi));
+      var a = screen(P0), b = screen(combo(P0, SPIN_PX, S));
+      var dx = b[0] - a[0], dy = b[1] - a[1], n = Math.hypot(dx, dy);
+      if (n < 1e-6) return;
+      var ux = dx / n, uy = dy / n, h = Math.min(HEAD, 0.5 * n), w = 0.45 * h, ex = b[0] - h * ux, ey = b[1] - h * uy;
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = COL;
+      ctx.fillStyle = COL;
+      ctx.lineWidth = SHAFT;
+      ctx.lineCap = "butt";
+      ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(ex, ey); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(b[0], b[1]);
+      ctx.lineTo(ex - w * uy, ey + w * ux);
+      ctx.lineTo(ex + w * uy, ey - w * ux);
+      ctx.closePath();
+      ctx.fill();
+    });
   }
 
   // Half of an axis, from radius r0 to r1 along sg times the unit vector d; arrow head at r = AXIS
@@ -256,14 +373,16 @@
     }
   }
   var AXES = [{ d: [1, 0, 0], name: "x" }, { d: [0, 1, 0], name: "y" }, { d: [0, 0, 1], name: "z" }];
-  // The halves of the axes towards (near) or away from the camera, between radii r0 and r1.
-  // which: the axes to draw, by name.
-  function drawAxes(ctx, near, r0, r1, which) {
+  // The halves of the axes between radii r0 and r1 that pass test(sign along the axis, axis direction).
+  function drawAxes(ctx, r0, r1, test) {
     AXES.forEach(function (a) {
-      if (which.indexOf(a.name) < 0) return;
-      var sg = depth(a.d[0], a.d[1], a.d[2]) >= 0 ? 1 : -1;
-      axisPart(ctx, a.d, near ? sg : -sg, r0, r1);
+      [1, -1].forEach(function (sg) { if (test(sg, a.d)) axisPart(ctx, a.d, sg, r0, r1); });
     });
+  }
+  function isNear(sg, d) { return sg * depth(d[0], d[1], d[2]) >= 0; }
+  // Which side of the orbital plate a half axis is on, against the camera's: negative is behind it.
+  function plateSide(sg, d) {
+    return sg * dot(d, LN) * (depth(LN[0], LN[1], LN[2]) >= 0 ? 1 : -1);
   }
   // Beside the arrow tip: to the right of a vertical axis, above a horizontal one.
   var labels = null;
@@ -295,7 +414,7 @@
     evalField(j);
     var hd = 0.5 * DISP * hMag;
     ctx.globalAlpha = alpha;
-    ctx.fillStyle = "#000";
+    ctx.fillStyle = hl[j] ? COL : "#000";
     ctx.beginPath();
     for (var k = 0; k < NM; k++) {
       var a = R0 * MC[k], b = R0 * MS[k], ap = 2 * (a * cPsi + b * sPsi);
@@ -321,7 +440,7 @@
     var ax = half * (cPsi * Tx3[j] + sPsi * Px3[j]), ay = half * (cPsi * Ty3[j] + sPsi * Py3[j]), az = half * cPsi * Tz3[j];
     var x = DIST * Nx[j], y = DIST * Ny[j], z = DIST * Nz[j];
     ctx.globalAlpha = alpha * fade;
-    ctx.strokeStyle = "#000";
+    ctx.strokeStyle = hl[j] ? COL : "#000";
     ctx.lineCap = "butt";
     ctx.lineWidth = BAR_W + (whiskerWidth(hMag, Math.max(0, Z[j])) - BAR_W) * m;
     ctx.beginPath();
@@ -339,7 +458,7 @@
     ctx.lineCap = "round";
     for (var i = 0; i < NG; i++) {
       var j = order[i], z = Z[j];
-      if (z < 0) continue;
+      if (z < 0 || hl[j]) continue;
       evalField(j);
       var u = hMag;
       var dx = half * u * (cPsi * TX[j] + sPsi * PX[j]);
@@ -356,14 +475,46 @@
         ctx.fill();
       }
     }
+    // Highlighted directions on the near side, on top: a bar in colour, and a dot that stays when |h| = 0.
+    ctx.strokeStyle = COL;
+    ctx.fillStyle = COL;
+    Object.keys(hl).forEach(function (key) {
+      var j = +key, z = Z[j];
+      if (z < 0) return;
+      evalField(j);
+      var dx = half * hMag * (cPsi * TX[j] + sPsi * PX[j]), dy = half * hMag * (cPsi * TY[j] + sPsi * PY[j]);
+      ctx.globalAlpha = m;
+      ctx.lineWidth = 2 * whiskerWidth(hMag, z);
+      ctx.beginPath();
+      ctx.moveTo(X[j] - dx, Y[j] - dy);
+      ctx.lineTo(X[j] + dx, Y[j] + dy);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(X[j], Y[j], 6, 0, 2 * Math.PI);
+      ctx.fill();
+    });
     ctx.globalAlpha = 1;
   }
 
   // ---- frame ----
-  var t0 = 0;
+  var t0 = 0, prec = false, hl = {};
+  // Precessing state and its clock, as on the precess slides.
+  var yS = initialState(), nS = 0, accS = 0, lastS = null;
+  function advance(now) {
+    if (lastS !== null) accS += Math.min(0.25, (now - lastS) / 1000);
+    lastS = now;
+    while (accS >= DT) { yS = rk4(yS, DT); nS++; accS -= DT; }
+  }
   function draw(ctx, now) {
-    var Phi = 2 * Math.PI * (now - t0) / PERIOD;
-    c2Phi = Math.cos(2 * Phi); s2Phi = Math.sin(2 * Phi);
+    var Phi;
+    if (prec) {
+      advance(now);
+      Phi = OMEGA * nS * DT;
+      setOrbit(vec(yS, 9), vec(yS, 12), Phi);
+    } else {
+      Phi = 2 * Math.PI * (now - t0) / PERIOD;
+      setOrbit([1, 0, 0], [0, 1, 0], Phi);
+    }
     var x = val(xf, now), m = val(morph, now);
     if (projDirty) reproject();
     ctx.setTransform(2, 0, 0, 2, 0, 0);
@@ -372,6 +523,7 @@
     // The rings behind or in front of the binary, far to near. These plates do not meet each other
     // or the orbital plate, so this order is correct from every direction.
     function rings(near) {
+      if (prec) return;
       RINGS.filter(function (r) { return (Z[r.j] >= 0) === near; })
         .sort(function (a, b) { return Z[a.j] - Z[b.j]; })
         .forEach(function (r) {
@@ -381,15 +533,19 @@
         });
     }
 
-    // Back to front, so that each plate and the surface hide what is behind them. The x and y axes
-    // lie in the orbital plate, so they go on top of it; the far half of z goes behind it.
-    drawAxes(ctx, false, DIST, AXIS, "xyz");
+    // Back to front, so that each plate and the surface hide what is behind them. An axis half
+    // behind the orbital plate goes before it; the others go after it, and over the holes if near.
+    var EPS_SIDE = 1e-9;
+    function behind(sg, d) { return plateSide(sg, d) < -EPS_SIDE; }
+    drawAxes(ctx, DIST, AXIS, function (sg, d) { return !isNear(sg, d); });
     rings(false);
-    drawAxes(ctx, false, 0, DIST, "z");
+    drawAxes(ctx, 0, DIST, behind);
+    if (prec) drawSpins(ctx, Phi, yS, true);
     drawOrbitalPlate(ctx);
-    drawAxes(ctx, false, 0, DIST, "xy");
+    drawAxes(ctx, 0, DIST, function (sg, d) { return !behind(sg, d) && !isNear(sg, d); });
     drawOrbit(ctx, Phi);
-    drawAxes(ctx, true, 0, DIST, "xyz");
+    if (prec) drawSpins(ctx, Phi, yS, false);
+    drawAxes(ctx, 0, DIST, function (sg, d) { return !behind(sg, d) && isNear(sg, d); });
     if (m > 0) {
       drawShade(ctx, m);
       ctx.globalAlpha = 0.35 * m;         // the sphere's outline
@@ -402,80 +558,127 @@
       drawSegments(ctx, m);
     }
     rings(true);
-    drawAxes(ctx, true, DIST, AXIS, "xyz");
+    drawAxes(ctx, DIST, AXIS, isNear);
     placeLabels();
   }
 
-  var raf = null, ctx = null, canvas = null, stage = 0, drag = null;
+  var raf = null, ctx = null, canvas = null, stage = 0, drag = null, wired = [];
   function loop(now) { draw(ctx, now); raf = requestAnimationFrame(loop); }
   function stop() { if (raf) cancelAnimationFrame(raf); raf = null; }
   function resetCamera() { yaw = YAW0; pitch = PITCH0; projDirty = true; }
   function endDrag() {
     drag = null;
-    canvas.classList.remove("sphere-grabbing");
+    if (canvas) canvas.classList.remove("sphere-grabbing");
+  }
+
+  // A click: the nearest direction on the sphere, on its near side, or the nearest ring or bar.
+  function pick(px, py) {
+    var best = -1, bestD = Infinity, j, d;
+    if ((prec && stage >= 1) || (!prec && stage >= 2)) {
+      for (j = 0; j < NG; j++) {
+        if (Z[j] < 0) continue;
+        d = Math.hypot(X[j] - px, Y[j] - py);
+        if (d < bestD && d < PICK_R) { bestD = d; best = j; }
+      }
+    } else if (!prec) {
+      RINGS.forEach(function (r) {
+        d = Math.hypot(X[r.j] - px, Y[r.j] - py);
+        if (d < bestD && d < PICK_RING) { bestD = d; best = r.j; }
+      });
+    }
+    if (best < 0) return;
+    if (hl[best]) delete hl[best]; else hl[best] = true;
   }
 
   // ---- drag, as in the workshop sphere; deltas are converted to slide pixels ----
-  function wire() {
-    canvas.addEventListener("pointerdown", function (e) {
-      canvas.setPointerCapture(e.pointerId);
-      drag = { x: e.clientX, y: e.clientY, k: canvas.getBoundingClientRect().width / 1920 };
-      canvas.classList.add("sphere-grabbing");
+  function wire(c) {
+    c.addEventListener("pointerdown", function (e) {
+      c.setPointerCapture(e.pointerId);
+      drag = { x: e.clientX, y: e.clientY, k: c.getBoundingClientRect().width / 1920, moved: 0 };
+      c.classList.add("sphere-grabbing");
     });
-    canvas.addEventListener("pointermove", function (e) {
+    c.addEventListener("pointermove", function (e) {
       if (!drag) return;
       var dx = (e.clientX - drag.x) / drag.k, dy = (e.clientY - drag.y) / drag.k;
       drag.x = e.clientX; drag.y = e.clientY;
+      drag.moved += Math.hypot(dx, dy);
+      if (drag.moved < PICK_MOVE) return;
       yaw += dx * 0.008;
       // Pitch 0 looks down the z axis from above, -pi/2 from the side, -pi from below.
       pitch = Math.max(-Math.PI, Math.min(0, pitch + dy * 0.008));
       projDirty = true;
     });
-    canvas.addEventListener("pointerup", endDrag);
-    canvas.addEventListener("pointercancel", endDrag);
+    c.addEventListener("pointerup", function (e) {
+      if (drag && drag.moved < PICK_MOVE) {
+        var r = c.getBoundingClientRect();
+        if (projDirty) reproject();
+        pick((e.clientX - r.left) / drag.k, (e.clientY - r.top) / drag.k);
+      }
+      endDrag();
+    });
+    c.addEventListener("pointercancel", endDrag);
+  }
+
+  function enterScene(slide, isPrec) {
+    canvas = slide.querySelector("canvas");
+    ctx = canvas.getContext("2d");
+    if (wired.indexOf(canvas) < 0) { wire(canvas); wired.push(canvas); }
+    labels = {};
+    AXES.forEach(function (a) { labels[a.name] = slide.querySelector(".sphere-axis-" + a.name); });
+    prec = isPrec;
+    hl = {};
+    t0 = performance.now();
+    yS = initialState(); nS = 0; accS = 0; lastS = null;
+    set(xf, isPrec ? 1 : 0, t0, true); set(morph, 0, t0, true);
+    resetCamera();
+    canvas.classList.add("sphere-grab");
+    stop();
+    raf = requestAnimationFrame(loop);
   }
 
   Deck.widget("sphere-slide", {
     steps: 2,
-    enter: function (slide) {
-      if (!canvas) {
-        canvas = slide.querySelector("canvas");
-        ctx = canvas.getContext("2d");
-        labels = {};
-        AXES.forEach(function (a) { labels[a.name] = slide.querySelector(".sphere-axis-" + a.name); });
-        wire();
-      }
-      t0 = performance.now();
-      set(xf, 0, t0, true); set(morph, 0, t0, true);
-      resetCamera();
-      stop();
-      raf = requestAnimationFrame(loop);
-    },
-    leave: function () { stop(); if (canvas) endDrag(); },
+    enter: function (slide) { enterScene(slide, false); },
+    leave: function () { stop(); endDrag(); },
     step: function (slide, k, dir) {
       var now = performance.now(), inst = dir < 0;
       stage = k;
       set(xf, k >= 1 ? 1 : 0, now, inst, XF_MS);
       set(morph, k >= 2 ? 1 : 0, now, inst, MORPH_MS);
-      canvas.classList.add("sphere-grab");
     },
-    // Not used by the engine: the closed form as the slide computes it, for the node check.
+    // Not used by the engine: the closed form as the slide computes it, and the state, for the checks.
     _check: {
       camera: function () { return { yaw: yaw, pitch: pitch }; },
       setCamera: function (y, p) { yaw = y; pitch = p; projDirty = true; },
       shadeLevel: shadeLevel,
+      highlighted: function () { return Object.keys(hl).map(Number); },
+      screenOf: function (j) { if (projDirty) reproject(); return [X[j], Y[j], Z[j]]; },
       constants: { DIST: DIST, ORB: ORB, BH: BH, R0: R0, DOT: DOT, DISP: DISP, BAR_HALF: BAR_HALF,
                    WLEN: WLEN, WSCALE: WSCALE, NG: NG, PITCH0: PITCH0, YAW0: YAW0, PERIOD: PERIOD },
       field: function (theta, phi, Phi) {
         var save = NP - 1, ct = Math.cos(theta), st = Math.sin(theta);
-        var keep = [Nx, Ny, Nz, Tx3, Ty3, Tz3, Px3, Py3, FA, FB, C2, S2].map(function (a) { return a[save]; });
+        var keep = [Nx, Ny, Nz, Tx3, Ty3, Tz3, Px3, Py3].map(function (a) { return a[save]; });
         addPoint(save, ct, st, Math.cos(phi), Math.sin(phi));
-        c2Phi = Math.cos(2 * Phi); s2Phi = Math.sin(2 * Phi);
+        setOrbit([1, 0, 0], [0, 1, 0], Phi);
         evalField(save);
         var out = { abs: hMag, c: cPsi, s: sPsi };
-        [Nx, Ny, Nz, Tx3, Ty3, Tz3, Px3, Py3, FA, FB, C2, S2].forEach(function (a, i) { a[save] = keep[i]; });
+        [Nx, Ny, Nz, Tx3, Ty3, Tz3, Px3, Py3].forEach(function (a, i) { a[save] = keep[i]; });
         return out;
       }
+    }
+  });
+
+  Deck.widget("sphere-precess", {
+    steps: 1,
+    enter: function (slide) { enterScene(slide, true); },
+    leave: function () { stop(); endDrag(); },
+    step: function (slide, k, dir) {
+      stage = k;
+      set(morph, k >= 1 ? 1 : 0, performance.now(), dir < 0, MORPH_MS);
+    },
+    _check: {
+      state: function () { return { y: yS, Phi: OMEGA * nS * DT }; },
+      highlighted: function () { return Object.keys(hl).map(Number); }
     }
   });
 })();

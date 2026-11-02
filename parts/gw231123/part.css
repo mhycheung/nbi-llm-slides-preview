@@ -1,0 +1,34 @@
+.gw231123-title-img {
+  position: absolute;
+  left: 210px;
+  top: 40px;
+  width: 1500px;
+}
+.gw231123-disk-img {
+  position: absolute;
+  left: 572px;
+  top: 125px;
+  height: 845px;
+}
+.gw231123-credit {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 972px;
+  text-align: center;
+}
+.gw231123-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1920px;
+  height: 1080px;
+  cursor: grab;
+  touch-action: none;
+}
+.gw231123-canvas.gw231123-grabbing { cursor: grabbing; }
+.gw231123-trace-label {
+  position: absolute;
+  left: 1310px;
+  pointer-events: none;
+}
