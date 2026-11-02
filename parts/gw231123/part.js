@@ -61,7 +61,7 @@
       var s = q === 0 ? 0 : 1 + Math.log(q / 1024) / Math.log(1 / H_MIN);
       table[q] = 255 * (1 - SH_MAX * Math.max(0, Math.min(1, s)));
     }
-    var band = 0.16;   // tiles are ordered by z: search only those within this difference in z
+    var band = 8 / Math.sqrt(n);   // tiles are ordered by z: search only those within this difference in z
     for (var j = 0; j < TH; j++) {
       var th = Math.PI * (j + 0.5) / TH, cz = Math.cos(th), st = Math.sin(th);
       var i0 = Math.max(0, Math.floor((1 - cz - band) / 2 * n)), i1 = Math.min(n, Math.ceil((1 - cz + band) / 2 * n));
