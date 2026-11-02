@@ -7,17 +7,29 @@
 <title>precess</title>
 <link rel="stylesheet" href="vendor/katex/katex.min.css">
 <link rel="stylesheet" href="common/deck.css">
-
+<link rel="stylesheet" href="parts/precess/part.css">
 </head>
 <body>
 <div class="deck">
 <!-- part: precess -->
-<section class="slide" id="precess-basic"></section>
+<section class="slide" id="precess-compare">
+  <h1 class="title">Example: precessing binary black holes</h1>
+  <canvas class="precess-canvas" width="3840" height="2160"></canvas>
+</section>
+
+<section class="slide" id="precess-detectors">
+  <h1 class="title">Face on vs edge on</h1>
+  <canvas class="precess-canvas" width="3840" height="2160"></canvas>
+  <div class="precess-credits">
+    <span class="cite">O'Shaughnessy+ (1209.3712)</span>
+    <span class="cite">Miller+ (2505.14573)</span>
+  </div>
+</section>
 </div>
 <script src="vendor/katex/katex.min.js"></script>
 <script src="vendor/katex/auto-render.min.js"></script>
 <script src="common/deck.js"></script>
-
+<script src="parts/precess/part.js"></script>
 <script>Deck.start();</script>
 </body>
 </html>

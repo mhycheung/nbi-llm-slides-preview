@@ -1,0 +1,18 @@
+.precess-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1920px;
+  height: 1080px;
+}
+
+/* Credits: centred, clear of the bottom 26 px kept free for the presentation's progress bar. */
+.precess-credits {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 34px;
+  display: flex;
+  justify-content: center;
+  gap: 70px;
+}

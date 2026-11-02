@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="common/deck.css">
 <link rel="stylesheet" href="parts/title/part.css">
 <link rel="stylesheet" href="parts/ai-use/part.css">
+<link rel="stylesheet" href="parts/precess/part.css">
 <link rel="stylesheet" href="parts/gw-ring/part.css">
 <link rel="stylesheet" href="parts/polar/part.css">
 <link rel="stylesheet" href="parts/sphere/part.css">
@@ -68,7 +69,19 @@
   </ul>
 </section>
 <!-- part: precess -->
-<section class="slide" id="precess-basic"></section>
+<section class="slide" id="precess-compare">
+  <h1 class="title">Example: precessing binary black holes</h1>
+  <canvas class="precess-canvas" width="3840" height="2160"></canvas>
+</section>
+
+<section class="slide" id="precess-detectors">
+  <h1 class="title">Face on vs edge on</h1>
+  <canvas class="precess-canvas" width="3840" height="2160"></canvas>
+  <div class="precess-credits">
+    <span class="cite">O'Shaughnessy+ (1209.3712)</span>
+    <span class="cite">Miller+ (2505.14573)</span>
+  </div>
+</section>
 <!-- part: gw-ring -->
 <section class="slide" id="gw-ring-binary">
   <canvas id="gw-ring-canvas" class="gw-ring-canvas" width="3840" height="2160"></canvas>
@@ -93,6 +106,7 @@
 <script src="vendor/katex/auto-render.min.js"></script>
 <script src="common/deck.js"></script>
 <script src="parts/ai-use/part.js"></script>
+<script src="parts/precess/part.js"></script>
 <script src="parts/gw-ring/part.js"></script>
 <script src="parts/polar/part.js"></script>
 <script src="parts/sphere/part.js"></script>
