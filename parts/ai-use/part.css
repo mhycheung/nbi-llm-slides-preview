@@ -29,8 +29,8 @@
 }
 
 .ai-use-link {
-  color: inherit;
-  text-decoration: none;
+  color: #0b57d0;
+  text-decoration: underline;
 }
 
 .ai-use-diagram {
