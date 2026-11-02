@@ -13,3 +13,4 @@
   transform: translate(-50%, -50%);
   pointer-events: none;
 }
+.sphere-axis-label { color: #8a8a8a; }

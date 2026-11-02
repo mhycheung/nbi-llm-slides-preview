@@ -1,11 +1,11 @@
 // Non-precessing equal-mass binary and its quadrupole strain, in phase with the orbit.
 // Everything is in one 3D scene with x, y, z axes; dragging turns the camera, at every stage.
 // Stage 0: the binary and four rings of test masses at +z, -z, +x, -x. Each ring lies in the plane
-// perpendicular to the line from the binary to it, so it faces the binary.
+// perpendicular to the line from the binary to it, so it faces the binary, on a nearly opaque square.
 // Stage 1: each ring becomes a bar along the stretch axis in that plane, length proportional to |h|.
 // Stage 2: the bars shrink to segments of a sphere of 600. The binary, its dotted orbit and its
-// square are inside the sphere; the surface is shaded by log |h|, white at the four nodes on the
-// equator, where the wave vanishes at that instant.
+// square are inside the sphere, seen through its surface; the surface is shaded by log |h|, white at
+// the four nodes on the equator, where the wave vanishes at that instant.
 //
 // Field, the one formula for everything drawn. With Q = (1/2)[cos 2Phi (xx - yy)
 // + sin 2Phi (xy + yx)] projected on the tangent vectors e_theta, e_phi and normalised by 2:
@@ -35,11 +35,13 @@
   var PLANE = 150;          // half-size of the faint square around each ring, slide px
   var ORB_SQ = 190;         // half-size of the orbital square; its corners, at 269 px, are inside the sphere
   var AXIS = 470;           // axis half-length, slide px; outside the rings and the sphere
-  var AXIS_W = 3, AXIS_HEAD = 24, AXIS_COL = "#444", LABEL_OFF = 36;
+  var AXIS_W = 2, AXIS_HEAD = 18, AXIS_COL = "#b8b8b8", LABEL_OFF = 34;
+  var PLATE_FILL = "rgba(233,233,233,0.82)", PLATE_EDGE = "#c4c4c4";   // nearly opaque, to hide what is behind
   var DOT_W = 3.5, DOT_GAP = 11;       // dotted orbit: dot size and spacing, slide px
-  // Surface shading: black with opacity SH_MAX * s, s = 1 + log|h| / log(1 / H_MIN), clipped to 0..1.
-  // |h| = 1 at the poles gives s = 1, |h| <= H_MIN gives s = 0: white, on the white slide.
-  var H_MIN = 0.05, SH_MAX = 0.32;
+  // Surface shading: gray level 1 - SH_MAX * s, s = 1 + log|h| / log(1 / H_MIN), clipped to 0..1.
+  // |h| = 1 at the poles gives s = 1, |h| <= H_MIN gives s = 0: white. SURF is the surface's opacity,
+  // so that what is inside the sphere is visible but clearly behind the surface.
+  var H_MIN = 0.12, SH_MAX = 0.34, SURF = 0.66;
   var SH_N = 256;           // shading image, pixels per side; smooth, so scaled up to the sphere
   var XF_MS = 450, MORPH_MS = 1000;    // crossfade and move-to-sphere durations
 
@@ -155,10 +157,10 @@
       }
     }
   }
-  function shadeAlpha(h2) {   // opacity 0..1 from |h|^2
-    if (h2 <= 0) return 0;
+  function shadeLevel(h2) {   // gray level 0..1 from |h|^2
+    if (h2 <= 0) return 1;
     var s = 1 + 0.5 * Math.log(h2) / Math.log(1 / H_MIN);
-    return SH_MAX * (s < 0 ? 0 : s > 1 ? 1 : s);
+    return 1 - SH_MAX * (s < 0 ? 0 : s > 1 ? 1 : s);
   }
   function drawShade(ctx, m) {
     if (!shCanvas) {
@@ -170,11 +172,12 @@
     var d = shImg.data;
     for (var k = 0; k < NPX; k++) {
       var hp = shA[k] * (c2Phi * shC[k] + s2Phi * shS[k]), hx = shB[k] * (s2Phi * shC[k] - c2Phi * shS[k]);
-      d[4 * k + 3] = 255 * shadeAlpha(hp * hp + hx * hx);
+      d[4 * k] = d[4 * k + 1] = d[4 * k + 2] = 255 * shadeLevel(hp * hp + hx * hx);
+      d[4 * k + 3] = 255;
     }
     shCtx.putImageData(shImg, 0, 0);
     ctx.save();
-    ctx.globalAlpha = m;
+    ctx.globalAlpha = SURF * m;
     ctx.beginPath();
     ctx.arc(CX, CY, DIST, 0, 2 * Math.PI);
     ctx.clip();
@@ -185,21 +188,27 @@
   function whiskerWidth(u, z) { return WSCALE * (1.2 + 2.3 * u) * (0.7 + 0.3 * z); }
 
   // ---- the parts of a frame ----
-  // The orbital plane: a faint square, the dotted orbit, and the holes, far hole first.
-  function drawBinary(ctx, Phi) {
-    ctx.globalAlpha = 1;
+  // A plate: nearly opaque square.
+  function plate(ctx, pts, alpha) {
+    ctx.globalAlpha = alpha;
     ctx.beginPath();
-    [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(function (q, i) {
-      var px = sx(ORB_SQ * q[0], ORB_SQ * q[1], 1), py = sy(ORB_SQ * q[0], ORB_SQ * q[1], 0, 1);
-      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-    });
+    pts.forEach(function (p, i) { if (i === 0) ctx.moveTo(p[0], p[1]); else ctx.lineTo(p[0], p[1]); });
     ctx.closePath();
-    ctx.fillStyle = "rgba(0,0,0,0.05)";
+    ctx.fillStyle = PLATE_FILL;
     ctx.fill();
-    ctx.strokeStyle = "rgba(0,0,0,0.4)";
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = PLATE_EDGE;
+    ctx.lineWidth = 1.5;
     ctx.stroke();
-
+    ctx.globalAlpha = 1;
+  }
+  function drawOrbitalPlate(ctx) {
+    plate(ctx, [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(function (q) {
+      return [sx(ORB_SQ * q[0], ORB_SQ * q[1], 1), sy(ORB_SQ * q[0], ORB_SQ * q[1], 0, 1)];
+    }), 1);
+  }
+  // The dotted orbit and the holes.
+  function drawOrbit(ctx, Phi) {
+    ctx.globalAlpha = 1;
     ctx.strokeStyle = "#000";
     ctx.lineWidth = DOT_W;
     ctx.lineCap = "round";
@@ -248,8 +257,10 @@
   }
   var AXES = [{ d: [1, 0, 0], name: "x" }, { d: [0, 1, 0], name: "y" }, { d: [0, 0, 1], name: "z" }];
   // The halves of the axes towards (near) or away from the camera, between radii r0 and r1.
-  function drawAxes(ctx, near, r0, r1) {
+  // which: the axes to draw, by name.
+  function drawAxes(ctx, near, r0, r1, which) {
     AXES.forEach(function (a) {
+      if (which.indexOf(a.name) < 0) return;
       var sg = depth(a.d[0], a.d[1], a.d[2]) >= 0 ? 1 : -1;
       axisPart(ctx, a.d, near ? sg : -sg, r0, r1);
     });
@@ -266,22 +277,15 @@
     });
   }
 
-  // Unit stretch axis at ring point j, for the field last evaluated, is cPsi e_theta + sPsi e_phi.
-  // Faint square of ring r, in its plane.
+  // Square of ring r, in its plane.
   function drawPlane(ctx, r, alpha) {
     var j = r.j, c = DIST;
-    ctx.globalAlpha = alpha;
-    ctx.beginPath();
-    [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(function (q, i) {
+    plate(ctx, [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(function (q) {
       var x = c * Nx[j] + PLANE * (q[0] * Tx3[j] + q[1] * Px3[j]);
       var y = c * Ny[j] + PLANE * (q[0] * Ty3[j] + q[1] * Py3[j]);
       var z = c * Nz[j] + PLANE * q[0] * Tz3[j];
-      if (i === 0) ctx.moveTo(sx(x, y, 1), sy(x, y, z, 1)); else ctx.lineTo(sx(x, y, 1), sy(x, y, z, 1));
-    });
-    ctx.closePath();
-    ctx.fillStyle = "rgba(0,0,0,0.035)";
-    ctx.fill();
-    ctx.globalAlpha = 1;
+      return [sx(x, y, 1), sy(x, y, z, 1)];
+    }), alpha);
   }
 
   // In the plane of the ring a mass at p = a e_theta + b e_phi moves by dx_i = (1/2) h_ij p_j, with
@@ -365,22 +369,27 @@
     ctx.setTransform(2, 0, 0, 2, 0, 0);
     ctx.clearRect(0, 0, 1920, 1080);
 
-    // One ring's objects, for those behind or in front of the binary.
+    // The rings behind or in front of the binary, far to near. These plates do not meet each other
+    // or the orbital plate, so this order is correct from every direction.
     function rings(near) {
-      RINGS.forEach(function (r) {
-        if ((Z[r.j] >= 0) !== near) return;
-        if (m < 1) drawPlane(ctx, r, 1 - m);
-        if (x < 1) drawRing(ctx, r, 1 - x);
-        if (x > 0 && m < 1) drawBar(ctx, r, x, m);
-      });
+      RINGS.filter(function (r) { return (Z[r.j] >= 0) === near; })
+        .sort(function (a, b) { return Z[a.j] - Z[b.j]; })
+        .forEach(function (r) {
+          if (m < 1) drawPlane(ctx, r, 1 - m);
+          if (x < 1) drawRing(ctx, r, 1 - x);
+          if (x > 0 && m < 1) drawBar(ctx, r, x, m);
+        });
     }
 
-    // Far to near: far axes, the inside, near axes, near surface, segments. Nothing inside the
-    // sphere is drawn over the near surface or its segments.
-    drawAxes(ctx, false, 0, AXIS);
+    // Back to front, so that each plate and the surface hide what is behind them. The x and y axes
+    // lie in the orbital plate, so they go on top of it; the far half of z goes behind it.
+    drawAxes(ctx, false, DIST, AXIS, "xyz");
     rings(false);
-    drawBinary(ctx, Phi);
-    drawAxes(ctx, true, 0, m > 0 ? DIST : AXIS);
+    drawAxes(ctx, false, 0, DIST, "z");
+    drawOrbitalPlate(ctx);
+    drawAxes(ctx, false, 0, DIST, "xy");
+    drawOrbit(ctx, Phi);
+    drawAxes(ctx, true, 0, DIST, "xyz");
     if (m > 0) {
       drawShade(ctx, m);
       ctx.globalAlpha = 0.35 * m;         // the sphere's outline
@@ -391,9 +400,9 @@
       ctx.stroke();
       ctx.globalAlpha = 1;
       drawSegments(ctx, m);
-      drawAxes(ctx, true, DIST, AXIS);
     }
     rings(true);
+    drawAxes(ctx, true, DIST, AXIS, "xyz");
     placeLabels();
   }
 
@@ -454,7 +463,7 @@
     _check: {
       camera: function () { return { yaw: yaw, pitch: pitch }; },
       setCamera: function (y, p) { yaw = y; pitch = p; projDirty = true; },
-      shadeAlpha: shadeAlpha,
+      shadeLevel: shadeLevel,
       constants: { DIST: DIST, ORB: ORB, BH: BH, R0: R0, DOT: DOT, DISP: DISP, BAR_HALF: BAR_HALF,
                    WLEN: WLEN, WSCALE: WSCALE, NG: NG, PITCH0: PITCH0, YAW0: YAW0, PERIOD: PERIOD },
       field: function (theta, phi, Phi) {

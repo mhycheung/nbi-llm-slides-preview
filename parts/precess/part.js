@@ -88,9 +88,10 @@
   var S_DET = 0.55;         // scale of the binary on the second slide
   var PANELS = [480, 1440], CY_CMP = 600;
   var CX_DET = 960, CY_DET = 590;
-  var AXIS = 280, AXIS_W = 3, AXIS_HEAD = 24;   // axis half-length, width, arrow head, slide px
-  var AXIS_COL = "#444";
-  var LABEL_OFF = 36;       // axis label from the arrow tip, sideways, slide px
+  var AXIS = 280, AXIS_W = 2, AXIS_HEAD = 18;   // axis half-length, width, arrow head, slide px
+  var AXIS_COL = "#b8b8b8";
+  var PLATE_FILL = "rgba(233,233,233,0.82)", PLATE_EDGE = "#c4c4c4";   // nearly opaque, to hide what is behind
+  var LABEL_OFF = 34;       // axis label from the arrow tip, sideways, slide px
   var EARTH_D = 410, EARTH_R = 52;    // Earth's distance from the binary and radius, slide px
   var LON0 = 65;            // Earth's longitude offset, deg: Europe and Africa face the first view
   var OCEAN = [38, 104, 178], LAND = [86, 158, 76];
@@ -120,10 +121,10 @@
       if (i === 0) ctx.moveTo(p[0], p[1]); else ctx.lineTo(p[0], p[1]);
     });
     ctx.closePath();
-    ctx.fillStyle = "rgba(0,0,0,0.04)";
+    ctx.fillStyle = PLATE_FILL;
     ctx.fill();
-    ctx.strokeStyle = "rgba(0,0,0,0.35)";
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = PLATE_EDGE;
+    ctx.lineWidth = 1.5;
     ctx.stroke();
   }
 
@@ -164,25 +165,35 @@
     ctx.setLineDash([]);
   }
 
-  // One binary: square, orbit, then far hole and its arrow, then near hole and its arrow. A hole's
-  // arrow is always on top of its own disc, so that it cannot be hidden.
-  function binary(ctx, y, phi, cx, cy, s) {
-    var e1 = vec(y, 9), e2 = vec(y, 12);
-    square(ctx, e1, e2, cx, cy, s);
-    orbit(ctx, e1, e2, cx, cy, s);
+  // Which side of the plate of normal L the camera is on: +1 or -1.
+  function cameraSide(L) { return dot(L, V) >= 0 ? 1 : -1; }
+
+  // One binary. An arrow on the far side of the plate from the camera goes behind the plate.
+  // back(), front(), if given, draw what lies behind and in front of the plate.
+  function binary(ctx, y, phi, cx, cy, s, back, front) {
+    var L = vec(y, 0), e1 = vec(y, 9), e2 = vec(y, 12), side = cameraSide(L);
     var c = Math.cos(phi), d = Math.sin(phi);
     var pos = [c * e1[0] + d * e2[0], c * e1[1] + d * e2[1], c * e1[2] + d * e2[2]];
     var near = dot(pos, V) > 0 ? 1 : -1;     // +1: the hole at +pos is the nearer one
+    function spinArrow(sg, behind) {
+      var P0 = [sg * ORB * pos[0], sg * ORB * pos[1], sg * ORB * pos[2]], Si = vec(y, sg > 0 ? 3 : 6);
+      if ((dot(Si, L) * side < 0) === behind) {
+        arrow(ctx, proj(P0, cx, cy, s), proj(combo(P0, SPIN_PX, Si), cx, cy, s), s);
+      }
+    }
+    if (back) back(side, L);
+    [-near, near].forEach(function (sg) { spinArrow(sg, true); });
+    square(ctx, e1, e2, cx, cy, s);
+    orbit(ctx, e1, e2, cx, cy, s);
     [-near, near].forEach(function (sg) {
-      var P0 = [sg * ORB * pos[0], sg * ORB * pos[1], sg * ORB * pos[2]];
-      var Si = vec(y, sg > 0 ? 3 : 6);
-      var a = proj(P0, cx, cy, s);
+      var a = proj([sg * ORB * pos[0], sg * ORB * pos[1], sg * ORB * pos[2]], cx, cy, s);
       ctx.fillStyle = "#000";
       ctx.beginPath();
       ctx.arc(a[0], a[1], BH * s, 0, 2 * Math.PI);
       ctx.fill();
-      arrow(ctx, a, proj(combo(P0, SPIN_PX, Si), cx, cy, s), s);
+      spinArrow(sg, false);
     });
+    if (front) front(side, L);
   }
 
   // Half of an axis, from the origin to sg times the unit vector d; arrow head on the + half.
@@ -343,20 +354,24 @@
     var key = camYaw + "," + camPitch;
     if (key !== earthKey) { renderEarth(); earthKey = key; }
     var cx = CX_DET, cy = CY_DET;
-    function halves(near) {   // one half of each axis lies behind the binary, one in front
+    // Each half axis and each Earth is on one side of the plate; each side is drawn far to near.
+    function items(onCameraSide, side, L) {
+      var list = [];
       AXES.forEach(function (a) {
-        var sg = dot(a.d, V) >= 0 ? 1 : -1;
-        axisHalf(ctx, a.d, near ? sg : -sg, cx, cy);
+        [1, -1].forEach(function (sg) {
+          if ((sg * dot(a.d, L) * side >= 0) !== onCameraSide) return;
+          list.push({ z: 0.5 * AXIS * sg * dot(a.d, V), draw: function () { axisHalf(ctx, a.d, sg, cx, cy); } });
+        });
       });
+      EARTHS.forEach(function (c) {
+        if ((dot(c, L) * side >= 0) !== onCameraSide) return;
+        list.push({ z: dot(c, V), draw: function () { earth(ctx, c, cx, cy); } });
+      });
+      list.sort(function (a, b) { return a.z - b.z; }).forEach(function (o) { o.draw(); });
     }
-    function earths(near) {
-      EARTHS.forEach(function (c) { if ((dot(c, V) >= 0) === near) earth(ctx, c, cx, cy); });
-    }
-    earths(false);
-    halves(false);
-    binary(ctx, y, phi, cx, cy, S_DET);
-    halves(true);
-    earths(true);
+    binary(ctx, y, phi, cx, cy, S_DET,
+      function (side, L) { items(false, side, L); },
+      function (side, L) { items(true, side, L); });
     AXES.forEach(function (a) { placeLabel(labels[a.name], a.d, cx, cy); });
   }, function (slide) {
     var canvas = slide.querySelector("canvas");
