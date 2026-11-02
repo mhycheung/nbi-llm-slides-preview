@@ -11,8 +11,10 @@
 // Clicking a viewing direction (without dragging) puts a red circle around its ring, bar or segment, in the
 // tangent plane; clicking it again removes the circle, and clicking another direction moves it there.
 // On the sphere, the side panel shows the highlighted direction, in its tangent plane seen from
-// outside: a large ring with the stretch bar, a toy L detector, and the detector's output over time.
-// Dragging the L rotates the detector; the output is s = (1/2) (u.h.u - v.h.v), u, v the unit arms.
+// outside: a large ring with the stretch bar, a toy Michelson interferometer (red laser, beam splitter, two
+// end mirrors, output port), and its output over time. Each mirror moves by (1/2) h.x from the beam splitter,
+// so also sideways, on a circle for circular polarization. Dragging near the detector rotates it. The output
+// is s = (1/2) (u.h.u - v.h.v), u, v the unit arms: the sideways motion does not enter it to first order.
 //
 // Field, the one formula for everything drawn. With e1, e2 the orbit's in-plane axes and
 // Q = (1/2)[cos 2Phi (e1 e1 - e2 e2) + sin 2Phi (e1 e2 + e2 e1)], projected on e_theta, e_phi, normalised by 2:
@@ -125,7 +127,8 @@
   var PICK_MOVE = 6, PICK_R = 28, PICK_RING = 110;   // a click moves less than this; reach of a click, slide px
   // Side panel, slide px: ring, L and trace, one above the other, right of the sphere and its axes.
   var PAN_X = 1670, RING_Y = 175, RING_R = 120, RING_DOT = 8, PAN_DISP = 0.45, PAN_BAR = 120;
-  var L_Y = 505, L_ARM = 150, L_W = 7, L_MASS = 11, L_GUIDE = 160;
+  var L_Y = 505, L_ARM = 150, L_GRAB = 185;   // detector centre, arm length, reach of a rotating drag
+  var MIR_HALF = 20, MIR_W = 9, BS_HALF = 19, LASER = 62, LASER_LEN = 44, LASER_W = 24, PD = 58;   // optics, slide px
   var TR_X0 = 1450, TR_X1 = 1890, TR_Y = 850, TR_AMP = 125, TR_SECONDS = 6, HIST = 1024;
   var SH_N = 256;           // shading image, pixels per side; smooth, so scaled up to the sphere
   var XF_MS = 450, MORPH_MS = 1000;    // crossfade and move-to-sphere durations
@@ -621,6 +624,13 @@
     var w = Math.atan2(dot(R, a2) - dot(U, a1), dot(R, a1) + dot(U, a2)), c = Math.cos(w), d = Math.sin(w);
     return { a1: a1, a2: a2, c: c, d: d };   // panel x = c a1 + d a2, panel y = -d a1 + c a2
   }
+  // Displacements of the two end mirrors in the panel, from the beam splitter: (1/2) PAN_DISP h.(L u), with
+  // h = |h| (2 a a - 1), a the stretch axis in the panel.
+  function mirrorMoves(hm, ax, ay, ux, uy, vx, vy) {
+    var hxx = hm * (2 * ax * ax - 1), hxy = 2 * hm * ax * ay, k = 0.5 * PAN_DISP * L_ARM;
+    return [k * (hxx * ux + hxy * uy), k * (hxy * ux - hxx * uy),
+            k * (hxx * vx + hxy * vy), k * (hxy * vx - hxx * vy)];
+  }
   function drawPanel(ctx, now, m) {
     var j = activeDir(), f = panelFrame(j);
     evalField(j);
@@ -650,39 +660,57 @@
     ctx.lineTo(PAN_X + bl * ax, RING_Y - bl * ay);
     ctx.stroke();
 
-    // The L: arms in the panel, the rest position in gray, each end moved by (1/2) (u.h.u) times the arm.
+    // The interferometer. Arms u, v in the panel; beam splitter fixed; each end mirror moved by (1/2) h.x.
     var ca = Math.cos(alpha), sa = Math.sin(alpha);
     var ux = f.c * ca + f.d * sa, uy = -f.d * ca + f.c * sa, vx = -uy, vy = ux;   // v is u turned by +90 deg
-    var i = (histN - 1) % HIST, out = outputAt(j, i), e = 0.5 * PAN_DISP * out;
+    var i = (histN - 1) % HIST, out = outputAt(j, i);
+    var ends = mirrorMoves(hMag, ax, ay, ux, uy, vx, vy);
     var ox = -L_ARM / 3 * (ux + vx), oy = -L_ARM / 3 * (uy + vy);
     function P(px, py) { return [PAN_X + px, L_Y - py]; }
-    function arms(lu, lv, col, w) {
-      var a = P(ox + lu * ux, oy + lu * uy), o = P(ox, oy), b = P(ox + lv * vx, oy + lv * vy);
+    function segment(a, b, col, w) {
       ctx.strokeStyle = col;
       ctx.lineWidth = w;
       ctx.beginPath();
-      ctx.moveTo(a[0], a[1]); ctx.lineTo(o[0], o[1]); ctx.lineTo(b[0], b[1]);
+      ctx.moveTo(a[0], a[1]);
+      ctx.lineTo(b[0], b[1]);
       ctx.stroke();
-      return [a, o, b];
     }
-    ctx.strokeStyle = "#dcdcdc";
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.arc(PAN_X, L_Y, L_GUIDE, 0, 2 * Math.PI);
-    ctx.stroke();
-    var bn = Math.SQRT1_2, kn = P(L_GUIDE * bn * (ux + vx), L_GUIDE * bn * (uy + vy));
-    ctx.fillStyle = "#a0a0a0";
-    ctx.beginPath();
-    ctx.arc(kn[0], kn[1], 9, 0, 2 * Math.PI);
-    ctx.fill();
-    arms(L_ARM, L_ARM, "#c8c8c8", 3);
-    var pts = arms(L_ARM * (1 + e), L_ARM * (1 - e), "#000", L_W);
-    ctx.fillStyle = "#000";
-    pts.forEach(function (p) {
-      ctx.beginPath();
-      ctx.arc(p[0], p[1], L_MASS, 0, 2 * Math.PI);
-      ctx.fill();
-    });
+    function beam(a, b, power) {    // a red line with a soft edge
+      ctx.globalAlpha = m * 0.22 * power;
+      segment(a, b, COL, 10);
+      ctx.globalAlpha = m * power;
+      segment(a, b, COL, 3.5);
+      ctx.globalAlpha = m;
+    }
+    var bs = P(ox, oy);
+    var m1 = [ox + L_ARM * ux + ends[0], oy + L_ARM * uy + ends[1]];
+    var m2 = [ox + L_ARM * vx + ends[2], oy + L_ARM * vy + ends[3]];
+    var laserEnd = P(ox - (LASER - 0.5 * LASER_LEN) * ux, oy - (LASER - 0.5 * LASER_LEN) * uy);
+    var pdEnd = P(ox - PD * vx, oy - PD * vy);
+    ctx.lineCap = "butt";
+    // Rest position of the arms, faint.
+    segment(P(ox + L_ARM * ux, oy + L_ARM * uy), bs, "#d4d4d4", 2);
+    segment(P(ox + L_ARM * vx, oy + L_ARM * vy), bs, "#d4d4d4", 2);
+    // Beams: laser to splitter, the two arms, and the output, brighter the larger |s|.
+    beam(laserEnd, bs, 1);
+    beam(bs, P(m1[0], m1[1]), 1);
+    beam(bs, P(m2[0], m2[1]), 1);
+    beam(bs, pdEnd, Math.min(1, Math.abs(out)));
+    // End mirrors, across their beams.
+    function mirror(mx, my) {
+      var n = Math.hypot(mx - ox, my - oy) || 1, tx = -(my - oy) / n, ty = (mx - ox) / n;
+      segment(P(mx - MIR_HALF * tx, my - MIR_HALF * ty), P(mx + MIR_HALF * tx, my + MIR_HALF * ty), "#000", MIR_W);
+    }
+    mirror(m1[0], m1[1]);
+    mirror(m2[0], m2[1]);
+    // Beam splitter: a plate at 45 deg to the arms.
+    var dx = Math.SQRT1_2 * (ux + vx), dy = Math.SQRT1_2 * (uy + vy);
+    segment(P(ox - BS_HALF * dx, oy - BS_HALF * dy), P(ox + BS_HALF * dx, oy + BS_HALF * dy), "#555", 5);
+    // Laser: a box on the input side. Output port: a small dark block.
+    var lc = [ox - LASER * ux, oy - LASER * uy];
+    segment(P(lc[0] - 0.5 * LASER_LEN * ux, lc[1] - 0.5 * LASER_LEN * uy),
+            P(lc[0] + 0.5 * LASER_LEN * ux, lc[1] + 0.5 * LASER_LEN * uy), "#000", LASER_W);
+    segment(P(ox - (PD + 8) * vx, oy - (PD + 8) * vy), P(ox - PD * vx, oy - PD * vy), "#000", 18);
 
     // Output against time, the present at the right; recomputed for the detector's present angle.
     ctx.strokeStyle = "#c8c8c8";
@@ -751,7 +779,7 @@
       c.setPointerCapture(e.pointerId);
       var r = c.getBoundingClientRect(), k = r.width / 1920;
       var px = (e.clientX - r.left) / k - PAN_X, py = L_Y - (e.clientY - r.top) / k;
-      if (panelOn() && Math.hypot(px, py) < L_GUIDE + 25) {   // the detector, not the camera
+      if (panelOn() && Math.hypot(px, py) < L_GRAB) {   // the detector, not the camera
         rotating = { angle: Math.atan2(py, px) };
         c.classList.add("sphere-grabbing");
         return;
@@ -827,6 +855,14 @@
                  n: j >= 0 ? [Nx[j], Ny[j], Nz[j]] : null, T: j >= 0 ? [Tx3[j], Ty3[j], Tz3[j]] : null, P: j >= 0 ? [Px3[j], Py3[j], 0] : null,
                  Q: [Qxx, Qxy, Qxz, Qyy, Qyz, Qzz] };
       },
+      mirrors: function () {
+        var j = activeDir(), f = panelFrame(j), ca = Math.cos(alpha), sa = Math.sin(alpha);
+        evalField(j);
+        var a1c = sPsi, a2c = -cPsi, ax = f.c * a1c + f.d * a2c, ay = -f.d * a1c + f.c * a2c;
+        var ux = f.c * ca + f.d * sa, uy = -f.d * ca + f.c * sa, vx = -uy, vy = ux;
+        return { move: mirrorMoves(hMag, ax, ay, ux, uy, vx, vy), u: [ux, uy], v: [vx, vy], hMag: hMag,
+                 output: outputAt(j, (histN - 1) % HIST), k: 0.5 * PAN_DISP * L_ARM };
+      },
       select: function (j, a) { hl = {}; hl[j] = true; hlOrder = [j]; alpha = a; },
       setAlpha: function (a) { alpha = a; },
       highlighted: function () { return Object.keys(hl).map(Number); },
@@ -861,6 +897,14 @@
                  trace: j >= 0 ? Array.from({ length: Math.min(histN, HIST) }, function (_, q) { return outputAt(j, q); }) : [],
                  n: j >= 0 ? [Nx[j], Ny[j], Nz[j]] : null, T: j >= 0 ? [Tx3[j], Ty3[j], Tz3[j]] : null, P: j >= 0 ? [Px3[j], Py3[j], 0] : null,
                  Q: [Qxx, Qxy, Qxz, Qyy, Qyz, Qzz] };
+      },
+      mirrors: function () {
+        var j = activeDir(), f = panelFrame(j), ca = Math.cos(alpha), sa = Math.sin(alpha);
+        evalField(j);
+        var a1c = sPsi, a2c = -cPsi, ax = f.c * a1c + f.d * a2c, ay = -f.d * a1c + f.c * a2c;
+        var ux = f.c * ca + f.d * sa, uy = -f.d * ca + f.c * sa, vx = -uy, vy = ux;
+        return { move: mirrorMoves(hMag, ax, ay, ux, uy, vx, vy), u: [ux, uy], v: [vx, vy], hMag: hMag,
+                 output: outputAt(j, (histN - 1) % HIST), k: 0.5 * PAN_DISP * L_ARM };
       },
       select: function (j, a) { hl = {}; hl[j] = true; hlOrder = [j]; alpha = a; },
       setAlpha: function (a) { alpha = a; },
