@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="icon" href="data:,">
+<title>slides preview</title>
+<style>
+html, body { margin: 0; height: 100%; font-family: Arial, Helvetica, sans-serif; }
+body { display: flex; flex-direction: column; }
+nav { display: flex; gap: 2px; padding: 4px; border-bottom: 1px solid #ccc; font-size: 14px; }
+nav a { padding: 4px 10px; color: #000; text-decoration: none; border: 1px solid #ccc; }
+nav a.on { background: #000; color: #fff; }
+nav .open { margin-left: auto; }
+iframe { flex: 1; border: 0; width: 100%; }
+</style>
+</head>
+<body>
+<nav><a data-page="presentation" href="#presentation">presentation</a><a data-page="ai-use" href="#ai-use">ai-use</a><a data-page="example" href="#example">example</a><a data-page="gw-ring" href="#gw-ring">gw-ring</a><a data-page="polar" href="#polar">polar</a><a data-page="precess" href="#precess">precess</a><a data-page="sphere" href="#sphere">sphere</a><a data-page="title" href="#title">title</a><a class="open" id="open" href="#" target="_blank">open alone</a></nav>
+<iframe id="view"></iframe>
+<script>
+var pages = ["presentation", "ai-use", "example", "gw-ring", "polar", "precess", "sphere", "title"];
+function show() {
+  var name = location.hash.slice(1);
+  if (pages.indexOf(name) < 0) name = pages[0];
+  if (!name) return;
+  document.querySelectorAll("nav a[data-page]").forEach(function (a) {
+    a.classList.toggle("on", a.getAttribute("data-page") === name);
+  });
+  var f = document.getElementById("view");
+  f.onload = function () { f.contentWindow.focus(); };
+  f.src = name + ".html";
+  document.getElementById("open").href = name + ".html";
+}
+window.addEventListener("hashchange", show);
+show();
+</script>
+</body>
+</html>

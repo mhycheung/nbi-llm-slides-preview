@@ -1,0 +1,26 @@
+.example-center {
+  position: absolute;
+  top: 180px;
+  left: 0;
+  right: 0;
+  text-align: center;
+}
+
+.example-canvas {
+  position: absolute;
+  top: 180px;
+  left: 160px;
+}
+
+.example-control {
+  position: absolute;
+  top: 920px;
+  left: 0;
+  right: 0;
+  text-align: center;
+}
+
+.example-control input {
+  width: 600px;
+  vertical-align: middle;
+}

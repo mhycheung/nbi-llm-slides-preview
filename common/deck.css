@@ -1,0 +1,140 @@
+/* Shared slide format. Parts do not override these rules; see slides/FORMAT.md. */
+
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #fff;
+}
+
+/* The 1920x1080 canvas, scaled and centred by deck.js. */
+.deck {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1920px;
+  height: 1080px;
+  transform-origin: 0 0;
+  background: #fff;
+  color: #000;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 40px;
+  line-height: 1.3;
+}
+
+.slide {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  display: none;
+  overflow: hidden;
+}
+
+.slide.active {
+  display: block;
+}
+
+/* A slide title, used only when the user asks for one. */
+.slide > h1.title {
+  position: absolute;
+  top: 40px;
+  left: 0;
+  right: 0;
+  margin: 0;
+  text-align: center;
+  font-size: 64px;
+  font-weight: normal;
+}
+
+/* Elements that appear at a step; they keep their space in the layout while hidden. */
+.slide [data-step]:not(.shown) {
+  visibility: hidden;
+}
+
+.slide h1, .slide h2, .slide h3, .slide p, .slide ul, .slide ol {
+  font-family: inherit;
+  color: inherit;
+}
+
+/* Source of a figure from another paper: "Cheung+ (2401.12345)", "LVK (2111.03606)".
+   Same size as body text. */
+.cite {
+  color: #808080;
+  font-size: 40px;
+}
+
+/* The link deck.js puts inside a credit, to the arXiv abstract page; looks like the credit. */
+.cite a.cite-link {
+  position: relative;   /* above figures and canvases drawn later, so clicks reach it */
+  z-index: 5;
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Label on a slide that shows ongoing work: bold red "ongoing work", top right. */
+.ongoing {
+  position: absolute;
+  top: 30px;
+  right: 50px;
+  margin: 0;
+  color: #d00000;
+  font-size: 40px;
+  font-weight: bold;
+}
+
+/* Stitched presentation only (added by build.py): a thin progress bar along the bottom
+   edge with a knob to drag, and the time of day, bottom left, both faint. The bar's box is
+   taller than the line it draws, so that the knob is easy to grab. */
+.deck-progress {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 0;
+  height: 26px;
+  z-index: 10;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.deck-progress-track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 6px;
+  height: 6px;
+  border-radius: 3px;
+  background: #eeeeee;
+}
+
+.deck-progress-fill {
+  height: 100%;
+  width: 0;
+  border-radius: 3px;
+  background: #c4c4c4;
+}
+
+.deck-progress-knob {
+  position: absolute;
+  bottom: 1px;
+  width: 16px;
+  height: 16px;
+  margin-left: -8px;
+  border-radius: 50%;
+  background: #a8a8a8;
+}
+
+.deck-progress:hover .deck-progress-knob,
+.deck-progress.dragging .deck-progress-knob {
+  background: #808080;
+}
+
+.deck-clock {
+  position: absolute;
+  left: 12px;
+  bottom: 30px;
+  z-index: 10;
+  font-size: 18px;
+  line-height: 1;
+  color: #b8b8b8;
+  pointer-events: none;
+}

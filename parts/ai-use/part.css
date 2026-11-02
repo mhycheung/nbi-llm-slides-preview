@@ -1,0 +1,41 @@
+.ai-use-big {
+  position: absolute;
+  top: 210px;
+  left: 150px;
+  right: 120px;
+  margin: 0;
+  padding: 0 0 0 50px;
+  font-size: 56px;
+}
+
+.ai-use-big > li {
+  margin-bottom: 70px;
+}
+
+.ai-use-big ul {
+  margin: 20px 0 0;
+  padding-left: 60px;
+  font-size: 44px;
+}
+
+.ai-use-big ul li {
+  margin-bottom: 12px;
+}
+
+.ai-use-thumb {
+  font-family: "Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
+}
+
+.ai-use-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.ai-use-diagram {
+  position: absolute;
+  top: 150px;
+  left: 60px;
+  width: 1800px;
+  height: 890px;
+  object-fit: contain;
+}
