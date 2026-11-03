@@ -46,3 +46,12 @@
 .title-logo-croucher {
   height: 190px;
 }
+
+.title-keys {
+  position: absolute;
+  top: 1005px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 22px;
+}
