@@ -3,7 +3,7 @@
 // data and waveform of both detectors. Data: window.gw231123_data (assets/data.js).
 // Each tile has h_+, h_x, in the source's L frame at f_ref = 10 Hz. A bar is along the stretch axis
 // cos(psi) e_theta + sin(psi) e_phi, psi = (1/2) atan2(h_x, h_+), length proportional to |h|.
-// The surface is gray in log |h|. A click puts a red circle around a direction's bar, in the tangent plane;
+// The surface is one gray level per tile, from log |h|, filled over the tile's Voronoi cell. A click puts a red circle around a direction's bar, in the tangent plane;
 // the same direction clears it, another moves it. The actual direction starts highlighted.
 (function () {
   "use strict";
@@ -12,18 +12,19 @@
   var BAR = 90;                  // bar length at |h| = 1, slide px
   var FPS = 24, HOLD = 24;       // data frames per second, about 1/41 of real time; frames held at the end
   var H_MIN = 0.03, SH_MAX = 0.36;   // gray level 1 - SH_MAX * s, s = 1 + log|h| / log(1 / H_MIN), clipped to 0..1
-  var SH_N = 256, TW = 256, TH = 128;   // shading image; table of |h| in (phi, theta)
+  var GROW = 1.04;               // cells drawn this much larger about their tile, to cover the seams between them
+  var BASE = "#ebebeb";          // disc under the cells: what shows in the slivers at the sphere's edge
   var COL = "#d00000";           // highlight and time cursor
   var HL_R = 48, HL_W = 4.5;     // highlight circle radius and width, slide px: around the longest bar
   var PICK_MOVE = 6, PICK_R = 40;   // a click moves less than this; reach of a click, slide px
   var PX0 = 1300, PX1 = 1880;    // whitened traces: horizontal extent, and each row's top and bottom
   var ROWS = [{ ifo: "H1", top: 170, bot: 500 }, { ifo: "L1", top: 610, bot: 940 }];
   var BAND = "rgba(100,197,235,0.5)", DATA = "#8a8a8a";
+  var TRACE_X = 2 * (PX0 - 20);  // left edge of the part of the traces image that is copied each frame, canvas px
 
   var D = null, n = 0, frames = null;
   var Tx, Ty, Tz, Px, Py, Nx, Ny, Nz, X, Y, Z, TX, TY, PX, PY, H, order;
-  var nb = null, wt = null, tex = null, table = null;
-  var shU = null, shV = null, shCanvas = null, shCtx = null, shImg = null, trace = null;
+  var VN = 0, VS = null, VZ = null, table = null, grays = null, trace = null;
   var yaw0 = 0, pitch0 = 0, yaw = 0, pitch = 0, cyw = 1, syw = 0, cpi = 1, spi = 0, dirty = true;
   var hl = {};
 
@@ -52,38 +53,17 @@
     buildTrace();
   }
 
-  // ---- table of |h| on (phi, theta): the three nearest tiles of each cell, inverse-square weights ----
+  // ---- gray level of |h| ----
   function buildTable() {
-    var N = TW * TH;
-    nb = new Uint16Array(3 * N); wt = new Float32Array(3 * N); tex = new Float32Array(N);
     table = new Uint8ClampedArray(1025);
     for (var q = 0; q <= 1024; q++) {
       var s = q === 0 ? 0 : 1 + Math.log(q / 1024) / Math.log(1 / H_MIN);
       table[q] = 255 * (1 - SH_MAX * Math.max(0, Math.min(1, s)));
     }
-    var band = 8 / Math.sqrt(n);   // tiles are ordered by z: search only those within this difference in z
-    for (var j = 0; j < TH; j++) {
-      var th = Math.PI * (j + 0.5) / TH, cz = Math.cos(th), st = Math.sin(th);
-      var i0 = Math.max(0, Math.floor((1 - cz - band) / 2 * n)), i1 = Math.min(n, Math.ceil((1 - cz + band) / 2 * n));
-      for (var i = 0; i < TW; i++) {
-        var ph = 2 * Math.PI * (i + 0.5) / TW, cx = st * Math.cos(ph), cy = st * Math.sin(ph);
-        var d1 = 9, d2 = 9, d3 = 9, a1 = 0, a2 = 0, a3 = 0;
-        for (var k = i0; k < i1; k++) {
-          var dx = Nx[k] - cx, dy = Ny[k] - cy, dz = Nz[k] - cz, d = dx * dx + dy * dy + dz * dz;
-          if (d < d1) { d3 = d2; a3 = a2; d2 = d1; a2 = a1; d1 = d; a1 = k; }
-          else if (d < d2) { d3 = d2; a3 = a2; d2 = d; a2 = k; }
-          else if (d < d3) { d3 = d; a3 = k; }
-        }
-        var c = 3 * (j * TW + i), w1 = 1 / (d1 + 1e-5), w2 = 1 / (d2 + 1e-5), w3 = 1 / (d3 + 1e-5), w = w1 + w2 + w3;
-        nb[c] = a1; nb[c + 1] = a2; nb[c + 2] = a3;
-        wt[c] = w1 / w; wt[c + 1] = w2 / w; wt[c + 2] = w3 / w;
-      }
-    }
-    shU = new Float32Array(SH_N * SH_N); shV = new Float32Array(SH_N * SH_N);
-    shCanvas = document.createElement("canvas");
-    shCanvas.width = shCanvas.height = SH_N;
-    shCtx = shCanvas.getContext("2d");
-    shImg = shCtx.createImageData(SH_N, SH_N);
+    grays = [];
+    for (var g = 0; g < 256; g++) grays.push("rgb(" + g + "," + g + "," + g + ")");
+    VN = D.verts.length / 3;
+    VS = new Float32Array(2 * VN); VZ = new Float32Array(VN);
   }
 
   // ---- the whitened traces, drawn once ----
@@ -134,17 +114,12 @@
       PY[j] = -y1 * cpi;
     }
     order.sort(byDepth);
-    // Each shading pixel's place in the table.
-    for (var i = 0; i < SH_N; i++) {
-      for (var k = 0; k < SH_N; k++) {
-        var u = (k + 0.5) / SH_N * 2 - 1, v = 1 - (i + 0.5) / SH_N * 2, q = u * u + v * v;
-        if (q > 1) { var f = 1 / Math.sqrt(q); u *= f; v *= f; q = 1; }
-        var w = Math.sqrt(1 - q), yy = v * cpi + w * spi, z = -v * spi + w * cpi;
-        var x = u * cyw + yy * syw, y = -u * syw + yy * cyw;
-        var ph = Math.atan2(y, x); if (ph < 0) ph += 2 * Math.PI;
-        shU[i * SH_N + k] = ph / (2 * Math.PI) * TW - 0.5;
-        shV[i * SH_N + k] = Math.acos(Math.max(-1, Math.min(1, z))) / Math.PI * TH - 0.5;
-      }
+    // Cell vertices on the screen.
+    for (var v = 0; v < VN; v++) {
+      var vx = D.verts[3 * v], vy = D.verts[3 * v + 1], vz = D.verts[3 * v + 2];
+      var y2 = vx * syw + vy * cyw, sx = vx * cyw - vy * syw, sy = -(y2 * cpi - vz * spi), z2 = y2 * spi + vz * cpi;
+      if (z2 < 0) { var f = 1 / Math.hypot(sx, sy); sx *= f; sy *= f; }   // behind the sphere: on its edge
+      VS[2 * v] = CX + RAD * sx; VS[2 * v + 1] = CY + RAD * sy; VZ[v] = z2;
     }
     dirty = false;
   }
@@ -156,30 +131,26 @@
       var a = frames[off + 2 * i], b = frames[off + 2 * i + 1];
       H[i] = Math.sqrt(a * a + b * b) / 32767;
     }
-    for (var c = 0, N = TW * TH; c < N; c++) {
-      tex[c] = wt[3 * c] * H[nb[3 * c]] + wt[3 * c + 1] * H[nb[3 * c + 1]] + wt[3 * c + 2] * H[nb[3 * c + 2]];
-    }
   }
   function drawShade(ctx) {
-    var d = shImg.data;
-    for (var k = 0, N = SH_N * SH_N; k < N; k++) {
-      var u = shU[k], v = shV[k];
-      var i0 = Math.floor(u), j0 = Math.floor(v), fu = u - i0, fv = v - j0;
-      var i1 = (i0 + 1 + TW) % TW; i0 = (i0 + TW) % TW;
-      var j1 = j0 + 1 >= TH ? TH - 1 : j0 + 1; if (j0 < 0) j0 = 0;
-      var h = (1 - fv) * ((1 - fu) * tex[j0 * TW + i0] + fu * tex[j0 * TW + i1]) +
-              fv * ((1 - fu) * tex[j1 * TW + i0] + fu * tex[j1 * TW + i1]);
-      var g = table[Math.min(1024, Math.round(h * 1024))];
-      d[4 * k] = d[4 * k + 1] = d[4 * k + 2] = g;
-      d[4 * k + 3] = 255;
-    }
-    shCtx.putImageData(shImg, 0, 0);
-    ctx.save();
+    // No clip, and no stroke round each cell: either one costs far more than the fills.
+    ctx.fillStyle = BASE;
     ctx.beginPath();
     ctx.arc(CX, CY, RAD, 0, 2 * Math.PI);
-    ctx.clip();
-    ctx.drawImage(shCanvas, CX - RAD, CY - RAD, 2 * RAD, 2 * RAD);
-    ctx.restore();
+    ctx.fill();
+    for (var i = 0; i < n; i++) {
+      var j = order[i], cell = D.cells[j], m = cell.length, any = false;
+      for (var k = 0; k < m; k++) if (VZ[cell[k]] >= 0) { any = true; break; }
+      if (!any) continue;
+      ctx.fillStyle = grays[table[Math.min(1024, Math.round(H[j] * 1024))]];
+      ctx.beginPath();
+      for (k = 0; k < m; k++) {
+        var x = X[j] + GROW * (VS[2 * cell[k]] - X[j]), y = Y[j] + GROW * (VS[2 * cell[k] + 1] - Y[j]);
+        if (k === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+      ctx.fill();
+    }
     ctx.globalAlpha = 0.35;
     ctx.strokeStyle = "#000";
     ctx.lineWidth = 2;
@@ -237,7 +208,7 @@
     drawShade(ctx);
     drawBars(ctx, f);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.drawImage(trace, 0, 0);
+    ctx.drawImage(trace, TRACE_X, 0, 3840 - TRACE_X, 2160, TRACE_X, 0, 3840 - TRACE_X, 2160);
     ctx.setTransform(2, 0, 0, 2, 0, 0);
     var x = trace.xOf(D.tFrames[f]);
     ctx.strokeStyle = COL;
