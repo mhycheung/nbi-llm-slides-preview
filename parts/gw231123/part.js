@@ -31,7 +31,7 @@
   function load() {
     D = window.gw231123_data;
     n = D.nTiles;
-    var raw = atob(D.frames.replace(/-/g, '+').replace(/_/g, '/')), bytes = new Uint8Array(raw.length);
+    var raw = atob(D.frames.join('').replace(/-/g, '+').replace(/_/g, '/')), bytes = new Uint8Array(raw.length);
     for (var b = 0; b < raw.length; b++) bytes[b] = raw.charCodeAt(b);
     frames = new Int16Array(bytes.buffer);
     function F() { return new Float32Array(n); }
