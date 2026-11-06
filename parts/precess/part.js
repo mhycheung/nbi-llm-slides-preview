@@ -222,7 +222,7 @@
   // camera is orthographic, so both Earths look the same and share one image, redrawn on a drag. ----
   var maskBits = null, earthCanvas = null, earthKey = null;
   function loadMask() {
-    var raw = atob(window.precess_earth_mask);
+    var raw = atob(window.precess_earth_mask.replace(/-/g, '+').replace(/_/g, '/'));
     maskBits = new Uint8Array(raw.length);
     for (var i = 0; i < raw.length; i++) maskBits[i] = raw.charCodeAt(i);
   }
